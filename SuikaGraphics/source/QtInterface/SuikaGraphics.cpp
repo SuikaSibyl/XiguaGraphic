@@ -20,7 +20,7 @@ SuikaGraphics::SuikaGraphics(QWidget *parent)
     m_pScene = ui->view;
     setCentralWidget(m_pScene);
 
-
+    // Create ProgressBar
     progressBar1 = new QProgressBar;
     progressBar1->setMaximumWidth(200);
     progressBar1->setMinimum(0);
@@ -28,12 +28,14 @@ SuikaGraphics::SuikaGraphics(QWidget *parent)
     progressBar1->setValue(100);
     ui->statusBar->addWidget(progressBar1);
 
+    // Create FPS Shower
     fpsShower = new QLabel;
     fpsShower->setText(QString("fps: ") + QString::number(60));
     fpsShower->setMinimumWidth(100);
     fpsShower->setMaximumWidth(200);
     ui->statusBar->addWidget(fpsShower);
 
+    // Create Time Shower
     timeShower = new QLabel;
     timeShower->setText(QString("run time: ") + QString::number(0));
     timeShower->setMinimumWidth(100);
@@ -50,6 +52,10 @@ SuikaGraphics::SuikaGraphics(QWidget *parent)
 
 SuikaGraphics::~SuikaGraphics() = default;
 
+/// <summary>
+/// Set the window size to m_WindowSize
+/// Then set the window to center of the screen
+/// </summary>
 void SuikaGraphics::adjustWindowSize()
 {
     resize(m_WindowSize.width(), m_WindowSize.height());
@@ -57,6 +63,9 @@ void SuikaGraphics::adjustWindowSize()
         qApp->screens().first()->availableGeometry()));
 }
 
+/// <summary>
+/// Initialize ToolBar
+/// </summary>
 void SuikaGraphics::addToolbarWidgets()
 {
     // Add CheckBox to tool-bar to stop/continue frames execution.
@@ -69,6 +78,7 @@ void SuikaGraphics::addToolbarWidgets()
             m_pScene->pauseFrames();
         });
     ui->mainToolBar->addWidget(m_pCbxDoFrames);
+
 }
 
 void SuikaGraphics::connectSlots()

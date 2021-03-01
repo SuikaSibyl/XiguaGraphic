@@ -7,11 +7,13 @@
 message("You are running qmake on a generated .pro file. This may not work!")
 
 
-HEADERS += ./SuikaGraphics.h \
+HEADERS += ./source/QDirect3D12Widget/d3dx12.h \
     ./source/QDirect3D12Widget/QDirect3D12Widget.h \
-    ./source/QDirect3D12Widget/d3dx12.h
-SOURCES += ./SuikaGraphics.cpp \
-    ./source/QDirect3D12Widget/QDirect3D12Widget.cpp \
-    ./main.cpp
+    ./header/Timer.h \
+    ./header/SuikaGraphics.h
+SOURCES += ./source/QDirect3D12Widget/QDirect3D12Widget.cpp \
+    ./source/Utility/Timer.cpp \
+    ./source/QtInterface/main.cpp \
+    ./source/QtInterface/SuikaGraphics.cpp
 FORMS += ./SuikaGraphics.ui
 RESOURCES += SuikaGraphics.qrc
