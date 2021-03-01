@@ -28,6 +28,9 @@
     <Filter Include="Source Files\Utility">
       <UniqueIdentifier>{75d4871d-aa8b-4358-bea4-fa782ee21d91}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\QtInterface">
+      <UniqueIdentifier>{fc480f90-2066-4535-a13e-77cb4669dcd8}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="SuikaGraphics.qrc">
@@ -36,35 +39,35 @@
     <QtUic Include="SuikaGraphics.ui">
       <Filter>Resource Files</Filter>
     </QtUic>
-    <QtMoc Include="SuikaGraphics.h">
-      <Filter>Header Files</Filter>
-    </QtMoc>
-    <ClCompile Include="SuikaGraphics.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="source\QDirect3D12Widget\QDirect3D12Widget.cpp">
       <Filter>Source Files\QDirect3D12Widget</Filter>
     </ClCompile>
-    <ClCompile Include="Timer.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="source\QtInterface\main.cpp">
+      <Filter>Source Files\QtInterface</Filter>
+    </ClCompile>
+    <ClCompile Include="source\QtInterface\SuikaGraphics.cpp">
+      <Filter>Source Files\QtInterface</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Utility\Timer.cpp">
+      <Filter>Source Files\Utility</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="source\QDirect3D12Widget\d3dx12.h">
       <Filter>Source Files\QDirect3D12Widget</Filter>
     </ClInclude>
-    <ClInclude Include="Timer.h">
+    <ClInclude Include="header\Timer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="source\QDirect3D12Widget\QDirect3D12Widget.h">
       <Filter>Source Files\QDirect3D12Widget</Filter>
+    </QtMoc>
+    <QtMoc Include="header\SuikaGraphics.h">
+      <Filter>Header Files</Filter>
     </QtMoc>
   </ItemGroup>
 </Project>

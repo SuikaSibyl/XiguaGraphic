@@ -43,6 +43,7 @@
     <Import Project="$(QtMsBuild)\qt_defaults.props" />
   </ImportGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|Win32'">
+    <IncludePath>E:\Qt\5.12.10\msvc2017\include;.\header;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|Win32'">
   </PropertyGroup>
@@ -86,17 +87,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Timer.cpp" />
+    <ClCompile Include="source\QtInterface\main.cpp" />
+    <ClCompile Include="source\QtInterface\SuikaGraphics.cpp" />
+    <ClCompile Include="source\Utility\Timer.cpp" />
     <QtRcc Include="SuikaGraphics.qrc" />
     <QtUic Include="SuikaGraphics.ui" />
-    <QtMoc Include="SuikaGraphics.h" />
-    <ClCompile Include="main.cpp" />
     <ClCompile Include="source\QDirect3D12Widget\QDirect3D12Widget.cpp" />
-    <ClCompile Include="SuikaGraphics.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <QtMoc Include="header\SuikaGraphics.h" />
+    <ClInclude Include="header\Timer.h" />
     <ClInclude Include="source\QDirect3D12Widget\d3dx12.h" />
-    <ClInclude Include="Timer.h" />
     <QtMoc Include="source\QDirect3D12Widget\QDirect3D12Widget.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
