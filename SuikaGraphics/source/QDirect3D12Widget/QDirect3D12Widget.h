@@ -1,7 +1,9 @@
-/*
- *
- */
 #pragma once
+
+#pragma comment(lib, "D3D12.lib")
+#pragma comment(lib,"d3dcompiler.lib")
+#pragma comment(lib, "dxgi.lib")
+
 
 #include <stdexcept>
 
@@ -13,6 +15,11 @@
 #include <dxgi1_4.h>
 #include <D3Dcompiler.h>
 #include "d3dx12.h"
+
+#include <Utility.h>
+#include <GameTimer.h>
+
+using Microsoft::WRL::ComPtr;
 
 class QDirect3D12Widget : public QWidget
 {
@@ -30,8 +37,9 @@ public:
     void continueFrames();
 
 private:
+    // Lifespan
     bool init();
-    void create3DDevice();
+
     void getHardwareAdapter(IDXGIFactory2 * pFactory, IDXGIAdapter1 ** ppAdapter);
     void resizeSwapChain(int width, int height);
     void cleanupRenderTarget();
@@ -45,6 +53,59 @@ private:
 
     void waitForGpu();
     void moveToNextFrame();
+
+    bool InitDirect3D();
+#pragma region InitializeSubFunctions
+    void CreateDevice();
+    void CreateFence();
+    void GetDescriptorSize();
+    void SetMSAA();
+    void CreateCommandObjects();
+    void CreateSwapChain();
+    void CreateDescriptorHeap();
+    void CreateRTV();
+    void CreateDSV();
+    void CreateViewPortAndScissorRect();
+#pragma endregion
+
+    void FlushCmdQueue();
+    void CalculateFrameState();
+    void Draw();
+
+
+protected:
+    int mCurrentFence = 0;	//初始CPU上的围栏点为0
+
+    GameTimer timer;
+
+    /// <summary>
+    /// 声明指针接口和变量
+    /// </summary>
+    // ====================================================
+    D3D12_VIEWPORT viewPort;
+    D3D12_RECT scissorRect;
+
+    UINT mCurrentBackBuffer = 0;
+
+    UINT rtvDescriptorSize;
+    UINT dsvDescriptorSize;
+    UINT cbv_srv_uavDescriptorSize;
+
+    ComPtr<ID3D12Device>    md3dDevice;
+    ComPtr<IDXGIFactory4>   dxgiFactory;
+    ComPtr<ID3D12Fence>     fence;
+
+    ComPtr<ID3D12CommandAllocator>      mDirectCmdListAlloc;
+    ComPtr<ID3D12CommandQueue>          mCommandQueue;
+    ComPtr<ID3D12GraphicsCommandList>   mCommandList;
+
+    ComPtr<ID3D12Resource>          depthStencilBuffer;
+    ComPtr<ID3D12Resource>          swapChainBuffer[2];
+    ComPtr<IDXGISwapChain>          m_SwapChain;
+    ComPtr<ID3D12DescriptorHeap>    rtvHeap;
+    ComPtr<ID3D12DescriptorHeap>    dsvHeap;
+    // ====================================================
+
 
     // Qt Events
 private:
@@ -94,17 +155,21 @@ public:
 
     D3DCOLORVALUE * BackColor() { return &m_BackColor; }
 
-private:
+protected:
+
     // Pipeline objects.
     static int const FRAME_COUNT = 3;
     UINT             m_iCurrFrameIndex;
 
-    ID3D12Device *              m_pDevice;
-    IDXGIFactory4 *             m_pFactory;
-    IDXGISwapChain3 *           m_pSwapChain;
-    ID3D12CommandQueue *        m_pCommandQueue;
-    ID3D12CommandAllocator *    m_pCommandAllocators[FRAME_COUNT];
-    ID3D12GraphicsCommandList * m_pCommandList;
+    ID3D12Device* m_pDevice;
+    IDXGIFactory4* m_pFactory;
+    IDXGISwapChain3* m_pSwapChain;
+    ID3D12CommandQueue* m_pCommandQueue;
+    ID3D12CommandAllocator* m_pCommandAllocators[FRAME_COUNT];
+    ID3D12GraphicsCommandList* m_pCommandList;
+
+
+    D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS msaaQualityLevels;
 
     ID3D12DescriptorHeap *      m_pRTVDescHeap;
     UINT                        m_iRTVDescSize; // May vary from device to device.
@@ -129,47 +194,3 @@ private:
 
     D3DCOLORVALUE m_BackColor;
 };
-
-// ############################################################################
-// ############################## Utils #######################################
-// ############################################################################
-#define ReleaseObject(object)                                                                 \
-    if ((object) != Q_NULLPTR)                                                                \
-    {                                                                                         \
-        object->Release();                                                                    \
-        object = Q_NULLPTR;                                                                   \
-    }
-#define ReleaseHandle(object)                                                                 \
-    if ((object) != Q_NULLPTR)                                                                \
-    {                                                                                         \
-        CloseHandle(object);                                                                  \
-        object = Q_NULLPTR;                                                                   \
-    }
-
-inline std::string HrToString(HRESULT hr)
-{
-    char s_str[64] = {};
-    sprintf_s(s_str, "HRESULT of 0x%08X", static_cast<UINT>(hr));
-    return std::string(s_str);
-}
-
-class HrException : public std::runtime_error
-{
-public:
-    HrException(HRESULT hr)
-        : std::runtime_error(HrToString(hr))
-        , m_hr(hr)
-    {
-    }
-    HRESULT Error() const { return m_hr; }
-
-private:
-    const HRESULT m_hr;
-};
-
-inline void ThrowIfFailed(HRESULT hr)
-{
-    if (FAILED(hr)) { throw HrException(hr); }
-}
-
-#define DXCall(func) ThrowIfFailed(func)

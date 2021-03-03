@@ -50,7 +50,10 @@
     <ClCompile Include="source\QtInterface\SuikaGraphics.cpp">
       <Filter>Source Files\QtInterface</Filter>
     </ClCompile>
-    <ClCompile Include="source\Utility\Timer.cpp">
+    <ClCompile Include="source\Utility\GameTimer.cpp">
+      <Filter>Source Files\Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Utility\Utility.cpp">
       <Filter>Source Files\Utility</Filter>
     </ClCompile>
   </ItemGroup>
@@ -58,7 +61,10 @@
     <ClInclude Include="source\QDirect3D12Widget\d3dx12.h">
       <Filter>Source Files\QDirect3D12Widget</Filter>
     </ClInclude>
-    <ClInclude Include="header\Timer.h">
+    <ClInclude Include="header\GameTimer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Utility.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

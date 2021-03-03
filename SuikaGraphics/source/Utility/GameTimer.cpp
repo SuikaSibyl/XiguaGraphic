@@ -1,7 +1,7 @@
-#include "Timer.h"
+#include "GameTimer.h"
 #include <windows.h>
 
-Timer::Timer() :
+GameTimer::GameTimer() :
 	mSecondsPerCount(0.0),
 	mDeltaTime(-1.0),
 	mBaseTime(0),
@@ -11,6 +11,7 @@ Timer::Timer() :
 	mStopped(false),
 	mStopTime(0)
 {
+	//We will get { TimePassed = CounterNum * mSecondsPerCount }
 	__int64 countsPerSec;
 	QueryPerformanceFrequency((LARGE_INTEGER*)&countsPerSec);
 	mSecondsPerCount = 1.0 / (double)countsPerSec;
@@ -19,7 +20,7 @@ Timer::Timer() :
 /*	Returns the total time elapsed since Reset() was called, NOT counting any
 	time when the clock is stopped.
 */
-float Timer::TotalTime()const
+float GameTimer::TotalTime()const
 {
 	// If we are stopped, do not count the time that has passed since we stopped.
 	// Moreover, if we previously already had a pause, the distance 
@@ -50,12 +51,12 @@ float Timer::TotalTime()const
 	}
 }
 
-float Timer::DeltaTime()const
+float GameTimer::DeltaTime()const
 {
 	return (float)mDeltaTime;
 }
 
-void Timer::Reset()
+void GameTimer::Reset()
 {
 	__int64 currTime;
 	QueryPerformanceCounter((LARGE_INTEGER*)&currTime);
@@ -65,7 +66,7 @@ void Timer::Reset()
 	mStopped = false;
 }
 
-void Timer::Start()
+void GameTimer::Start()
 {
 	__int64 startTime;
 	QueryPerformanceCounter((LARGE_INTEGER*)&startTime);
@@ -84,7 +85,7 @@ void Timer::Start()
 	}
 }
 
-void Timer::Stop()
+void GameTimer::Stop()
 {
 	if (!mStopped)
 	{
@@ -95,7 +96,7 @@ void Timer::Stop()
 	}
 }
 
-void Timer::Tick()
+void GameTimer::Tick()
 {
 	if (mStopped)
 	{

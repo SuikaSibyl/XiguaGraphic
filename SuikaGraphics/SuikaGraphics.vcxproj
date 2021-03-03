@@ -156,14 +156,16 @@
   <ItemGroup>
     <ClCompile Include="source\QtInterface\main.cpp" />
     <ClCompile Include="source\QtInterface\SuikaGraphics.cpp" />
-    <ClCompile Include="source\Utility\Timer.cpp" />
+    <ClCompile Include="source\Utility\GameTimer.cpp" />
+    <ClCompile Include="source\Utility\Utility.cpp" />
     <QtRcc Include="SuikaGraphics.qrc" />
     <QtUic Include="SuikaGraphics.ui" />
     <ClCompile Include="source\QDirect3D12Widget\QDirect3D12Widget.cpp" />
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="header\SuikaGraphics.h" />
-    <ClInclude Include="header\Timer.h" />
+    <ClInclude Include="header\GameTimer.h" />
+    <ClInclude Include="header\Utility.h" />
     <ClInclude Include="source\QDirect3D12Widget\d3dx12.h" />
     <QtMoc Include="source\QDirect3D12Widget\QDirect3D12Widget.h" />
   </ItemGroup>
