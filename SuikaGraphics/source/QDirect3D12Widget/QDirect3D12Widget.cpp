@@ -8,12 +8,20 @@
 #include <DirectXMath.h>
 
 #include <Shader.h>
+#include <UploadBuffer.h>
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
 
 constexpr int FPS_LIMIT    = 120.0f;
 constexpr int MS_PER_FRAME = (int)((1.0f / FPS_LIMIT) * 1000.0f);
+
+//定义顶点结构体
+struct Vertex
+{
+    XMFLOAT3 Pos;
+    XMFLOAT4 Color;
+};
 
 QDirect3D12Widget::QDirect3D12Widget(QWidget * parent)
     : QWidget(parent)
@@ -81,6 +89,185 @@ void QDirect3D12Widget::showEvent(QShowEvent * event)
 
     QWidget::showEvent(event);
 }
+void QDirect3D12Widget::BuildDescriptorHeaps()
+{
+    D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc;
+    cbvHeapDesc.NumDescriptors = 1;
+    cbvHeapDesc.Type =
+        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    cbvHeapDesc.Flags =
+        D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    cbvHeapDesc.NodeMask = 0;
+    ThrowIfFailed(md3dDevice -> CreateDescriptorHeap(&cbvHeapDesc,
+        IID_PPV_ARGS(&mCbvHeap)));
+}
+
+void QDirect3D12Widget::BuildConstantBuffers()
+{
+    mObjectCB = std::make_unique<UploadBuffer<ObjectConstants>>(md3dDevice.Get(), 1, true);
+    UINT objCBByteSize =
+        Utils::CalcConstantBufferByteSize(sizeof(ObjectConstants));
+    D3D12_GPU_VIRTUAL_ADDRESS cbAddress = mObjectCB -> Resource()->GetGPUVirtualAddress();
+    // Offset to the ith object constant buffer in the buffer.
+        // Here our i = 0.
+        int boxCBufIndex = 0;
+    cbAddress += boxCBufIndex * objCBByteSize;
+    D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
+    cbvDesc.BufferLocation = cbAddress;
+    cbvDesc.SizeInBytes =
+        Utils::CalcConstantBufferByteSize(sizeof(ObjectConstants));
+    md3dDevice->CreateConstantBufferView(
+        &cbvDesc,
+        mCbvHeap->GetCPUDescriptorHandleForHeapStart());
+}
+
+void QDirect3D12Widget::BuildRootSignature()
+{
+    // Shader programs typically require resources as input(constant
+    // buffers, textures, samplers). The root signature defines the
+    // resources the shader programs expect. If we think of the shader
+    // programs as a function, and the input resources as function
+    // parameters, then the root signature can be thought of as defining
+    // the function signature.
+    // Root parameter can be a table, root descriptor or root constants.
+    CD3DX12_ROOT_PARAMETER slotRootParameter[1];
+    // Create a single descriptor table of CBVs.
+    CD3DX12_DESCRIPTOR_RANGE cbvTable;
+    cbvTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1,
+        0);
+    slotRootParameter[0].InitAsDescriptorTable(1,
+        &cbvTable);
+    // A root signature is an array of root parameters.
+    CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(1,
+        slotRootParameter, 0, nullptr,
+        D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+    // create a root signature with a single slot which points to a
+    // descriptor range consisting of a single constant buffer
+    ComPtr<ID3DBlob> serializedRootSig = nullptr;
+    ComPtr<ID3DBlob> errorBlob = nullptr;
+    HRESULT hr =
+        D3D12SerializeRootSignature(&rootSigDesc,
+            D3D_ROOT_SIGNATURE_VERSION_1,
+            serializedRootSig.GetAddressOf(),
+            errorBlob.GetAddressOf());
+    if (errorBlob != nullptr)
+    {
+        ::OutputDebugStringA((char*)errorBlob -> GetBufferPointer());
+    }
+    ThrowIfFailed(hr);
+    ThrowIfFailed(md3dDevice->CreateRootSignature(
+        0,
+        serializedRootSig->GetBufferPointer(),
+        serializedRootSig->GetBufferSize(),
+        IID_PPV_ARGS(&mRootSignature)));
+}
+void QDirect3D12Widget::BuildShadersAndInputLayout()
+{
+    mpShader = new Shader(md3dDevice);
+}
+void QDirect3D12Widget::BuildBoxGeometry()
+{
+    std::array<Vertex, 8> vertices =
+    {
+    Vertex({ XMFLOAT3(-1.0f, -1.0f, -1.0f),
+    XMFLOAT4(Colors::White) }),
+    Vertex({ XMFLOAT3(-1.0f, +1.0f, -1.0f),
+    XMFLOAT4(Colors::Black) }),
+    Vertex({ XMFLOAT3(+1.0f, +1.0f, -1.0f),
+    XMFLOAT4(Colors::Red) }),
+    Vertex({ XMFLOAT3(+1.0f, -1.0f, -1.0f),
+    XMFLOAT4(Colors::Green) }),
+    Vertex({ XMFLOAT3(-1.0f, -1.0f, +1.0f),
+    XMFLOAT4(Colors::Blue) }),
+    Vertex({ XMFLOAT3(-1.0f, +1.0f, +1.0f),
+    XMFLOAT4(Colors::Yellow) }),
+    Vertex({ XMFLOAT3(+1.0f, +1.0f, +1.0f),
+    XMFLOAT4(Colors::Cyan) }),
+    Vertex({ XMFLOAT3(+1.0f, -1.0f, +1.0f),
+    XMFLOAT4(Colors::Magenta) })
+    };
+    std::array<std::uint16_t, 36> indices =
+    {
+        // front face
+        0, 1, 2,
+        0, 2, 3,
+        // back face
+        4, 6, 5,
+        4, 7, 6,
+        // left face
+        4, 5, 1,
+        4, 1, 0,
+        // right face
+        3, 2, 6,
+        3, 6, 7,
+        // top face
+        1, 5, 6,
+        1, 6, 2,
+        // bottom face
+        4, 0, 3,
+        4, 3, 7
+    };
+    const UINT vbByteSize = (UINT)vertices.size() *
+        sizeof(Vertex);
+    const UINT ibByteSize = (UINT)indices.size() *
+        sizeof(std::uint16_t);
+    mBoxGeo = std::make_unique<MeshGeometry>();
+    mBoxGeo->Name = "boxGeo";
+    ThrowIfFailed(D3DCreateBlob(vbByteSize, &mBoxGeo -> VertexBufferCPU));
+    CopyMemory(mBoxGeo->VertexBufferCPU -> GetBufferPointer(), vertices.data(), vbByteSize);
+    ThrowIfFailed(D3DCreateBlob(ibByteSize, &mBoxGeo -> IndexBufferCPU));
+    CopyMemory(mBoxGeo->IndexBufferCPU -> GetBufferPointer(), indices.data(), ibByteSize);
+    mBoxGeo->VertexBufferGPU =
+        CreateDefaultBuffer(vbByteSize, vertices.data(), mBoxGeo->VertexBufferUploader);
+    mBoxGeo->IndexBufferGPU =
+        CreateDefaultBuffer(ibByteSize, indices.data(), mBoxGeo->IndexBufferUploader);
+    mBoxGeo->VertexByteStride = sizeof(Vertex);
+    mBoxGeo->VertexBufferByteSize = vbByteSize;
+    mBoxGeo->IndexFormat = DXGI_FORMAT_R16_UINT;
+    mBoxGeo->IndexBufferByteSize = ibByteSize;
+    SubmeshGeometry submesh;
+    submesh.IndexCount = (UINT)indices.size();
+    submesh.StartIndexLocation = 0;
+    submesh.BaseVertexLocation = 0;
+    mBoxGeo->DrawArgs["box"] = submesh;
+}
+
+void QDirect3D12Widget::BuildPSO()
+{
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc;
+    ZeroMemory(&psoDesc,
+        sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+    psoDesc.InputLayout = { mpShader->inputLayoutDesc.data(),
+    (UINT)mpShader->inputLayoutDesc.size() };
+    psoDesc.pRootSignature = mRootSignature.Get();
+    psoDesc.VS =
+    {
+    reinterpret_cast<BYTE*>(mpShader->vsBytecode -> GetBufferPointer()),
+    mpShader->vsBytecode->GetBufferSize()
+    };
+    psoDesc.PS =
+    {
+    reinterpret_cast<BYTE*>(mpShader->psBytecode -> GetBufferPointer()),
+    mpShader->psBytecode->GetBufferSize()
+    };
+    psoDesc.RasterizerState =
+        CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+    psoDesc.BlendState =
+        CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+    psoDesc.DepthStencilState =
+        CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+    psoDesc.SampleMask = UINT_MAX;
+    psoDesc.PrimitiveTopologyType =
+        D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    psoDesc.NumRenderTargets = 1;
+    psoDesc.RTVFormats[0] = mBackBufferFormat;
+    psoDesc.SampleDesc.Count = m4xMsaaState ? 4 : 1;
+    psoDesc.SampleDesc.Quality = m4xMsaaState ?
+        (m4xMsaaQuality - 1) : 0;
+    psoDesc.DSVFormat = mDepthStencilFormat;
+    ThrowIfFailed(md3dDevice -> CreateGraphicsPipelineState(&psoDesc,
+    IID_PPV_ARGS(&mPSO)));
+}
 
 bool QDirect3D12Widget::init()
 {
@@ -88,15 +275,24 @@ bool QDirect3D12Widget::init()
 
     mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr);
 
-    CreateBuffer();
+    BuildDescriptorHeaps();
+    BuildConstantBuffers();
+    BuildRootSignature();
+    BuildShadersAndInputLayout();
+    BuildBoxGeometry();
+    BuildPSO();
+    //CreateBuffer();
+
     ThrowIfFailed(mCommandList->Close());
     ID3D12CommandList* cmdLists[] = { mCommandList.Get() };
     mCommandQueue->ExecuteCommandLists(_countof(cmdLists), cmdLists);
 
+    // Wait until initialization is complete.
     FlushCmdQueue();
 
+    // Start FrameLoop
     connect(&m_qTimer, &QTimer::timeout, this, &QDirect3D12Widget::onFrame);
-
+    // Start Timer
     timer.Reset();
 
     return true;
@@ -113,6 +309,7 @@ void QDirect3D12Widget::onFrame()
     timer.Tick();
 
     CalculateFrameState();
+    Update();
     Draw();
 }
 
@@ -155,12 +352,6 @@ void QDirect3D12Widget::CalculateFrameState()
         timeElapsed += 1.0f;
     }
 }
-//定义顶点结构体
-struct Vertex
-{
-    XMFLOAT3 Pos;
-    XMFLOAT4 Color;
-};
 
 //实例化顶点结构体并填充
 std::array<Vertex, 8> vertices =
@@ -211,9 +402,17 @@ const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint32_t);
 void QDirect3D12Widget::Draw()
 {
     //首先重置命令分配器cmdAllocator和命令列表cmdList，目的是重置命令和列表，复用相关内存。
+    // Reuse the memory associated with command recording.
+    // We can only reset when the associated command lists have finished
+    // execution on the GPU.
     ThrowIfFailed(mDirectCmdListAlloc->Reset());//重复使用记录命令的相关内存
-    ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));//复用命令列表及其内存
+    // A command list can be reset after it has been added to the
+    // command queue via ExecuteCommandList. Reusing the command
+    // list reuses memory.
+    //ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));//复用命令列表及其内存
+    ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), mPSO.Get()));//复用命令列表及其内存
 
+    // Indicate a state transition on the resource usage.
     //接着我们将后台缓冲资源从呈现状态转换到渲染目标状态（即准备接收图像渲染）。
     UINT& ref_mCurrentBackBuffer = mCurrentBackBuffer;
     mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(swapChainBuffer[ref_mCurrentBackBuffer].Get(),//转换资源为后台缓冲区资源
@@ -223,6 +422,7 @@ void QDirect3D12Widget::Draw()
     mCommandList->RSSetViewports(1, &viewPort);
     mCommandList->RSSetScissorRects(1, &scissorRect);
 
+    // Clear the back buffer and depth buffer.
     //然后清除后台缓冲区和深度缓冲区，并赋值。步骤是先获得堆中描述符句柄（即地址），再通过ClearRenderTargetView函数和ClearDepthStencilView函数做清除和赋值。这里我们将RT资源背景色赋值为DarkRed（暗红）。
     D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = CD3DX12_CPU_DESCRIPTOR_HANDLE(rtvHeap->GetCPUDescriptorHandleForHeapStart(), ref_mCurrentBackBuffer, rtvDescriptorSize);
     mCommandList->ClearRenderTargetView(rtvHandle, DirectX::Colors::DarkRed, 0, nullptr);//清除RT背景色为暗红，并且不设置裁剪矩形
@@ -234,10 +434,10 @@ void QDirect3D12Widget::Draw()
         0,	//裁剪矩形数量
         nullptr);	//裁剪矩形指针
 
-    D3D12_VERTEX_BUFFER_VIEW vbv;
-    vbv.BufferLocation = VertexBufferGPU->GetGPUVirtualAddress();//顶点缓冲区资源虚拟地址
-    vbv.SizeInBytes = vbByteSize;	//顶点缓冲区大小（所有顶点数据大小）
-    vbv.StrideInBytes = sizeof(Vertex);	//每个顶点元素所占用的字节数
+    //D3D12_VERTEX_BUFFER_VIEW vbv;
+    //vbv.BufferLocation = VertexBufferGPU->GetGPUVirtualAddress();//顶点缓冲区资源虚拟地址
+    //vbv.SizeInBytes = vbByteSize;	//顶点缓冲区大小（所有顶点数据大小）
+    //vbv.StrideInBytes = sizeof(Vertex);	//每个顶点元素所占用的字节数
 
     //设置CBV描述符堆
     //ID3D12DescriptorHeap* descriHeaps[] = { mCbvHeap.Get() };//注意这里之所以是数组，是因为还可能包含SRV和UAV，而这里我们只用到了CBV
@@ -256,28 +456,45 @@ void QDirect3D12Widget::Draw()
     //    0,	//起始索引位置
     //    0,	//子物体起始索引在全局索引中的位置
     //    0);	//实例化的高级技术，暂时设置为0
-
+    // Specify the buffers we are going to render to. 
+    //mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
     //然后我们指定将要渲染的缓冲区，即指定RTV和DSV。
     mCommandList->OMSetRenderTargets(1,//待绑定的RTV数量
         &rtvHandle,	//指向RTV数组的指针
         true,	//RTV对象在堆内存中是连续存放的
         &dsvHandle);	//指向DSV的指针
 
+    ID3D12DescriptorHeap* descriptorHeaps[] = { mCbvHeap.Get() }; 
+    mCommandList -> SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
+    mCommandList -> SetGraphicsRootSignature(mRootSignature.Get());
+    mCommandList->IASetVertexBuffers(0, 1, &mBoxGeo -> VertexBufferView());
+    mCommandList->IASetIndexBuffer(&mBoxGeo -> IndexBufferView());
+    mCommandList -> IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    mCommandList->SetGraphicsRootDescriptorTable(
+        0, mCbvHeap -> GetGPUDescriptorHandleForHeapStart());
+    mCommandList->DrawIndexedInstanced(
+        mBoxGeo->DrawArgs["box"].IndexCount,
+        1, 0, 0, 0);
 
-
-    //等到渲染完成，我们要将后台缓冲区的状态改成呈现状态，使其之后推到前台缓冲区显示。完了，关闭命令列表，等待传入命令队列。
+    // Indicate a state transition on the resource usage.
+    // 等到渲染完成，我们要将后台缓冲区的状态改成呈现状态，使其之后推到前台缓冲区显示。完了，关闭命令列表，等待传入命令队列。
     mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(swapChainBuffer[ref_mCurrentBackBuffer].Get(),
         D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));//从渲染目标到呈现
-    //完成命令的记录关闭命令列表
+    // 完成命令的记录关闭命令列表
     ThrowIfFailed(mCommandList->Close());
 
+    // Add the command list to the queue for execution.
     //等CPU将命令都准备好后，需要将待执行的命令列表加入GPU的命令队列。使用的是ExecuteCommandLists函数。
     ID3D12CommandList* commandLists[] = { mCommandList.Get() };//声明并定义命令列表数组
     mCommandQueue->ExecuteCommandLists(_countof(commandLists), commandLists);//将命令从命令列表传至命令队列
 
+    // swap the back and front buffers
     ThrowIfFailed(m_SwapChain->Present(0, 0));
     ref_mCurrentBackBuffer = (ref_mCurrentBackBuffer + 1) % 2;
 
+    // Wait until frame commands are complete. This waiting is
+    // inefficient and is done for simplicity. Later we will show how to
+    // organize our rendering code so we do not have to wait per frame.
     FlushCmdQueue();
 }
 
@@ -515,195 +732,198 @@ void QDirect3D12Widget::CreateViewPortAndScissorRect()
 
 void QDirect3D12Widget::CreateBuffer()
 {
-    //【2】创建堆参数
-    //默认堆,上传堆
-    D3D12_HEAP_PROPERTIES defaultHeap;
-    memset(&defaultHeap, 0, sizeof(defaultHeap));
-    defaultHeap.Type = D3D12_HEAP_TYPE_DEFAULT;
+    ////【2】创建堆参数
+    ////默认堆,上传堆
+    //D3D12_HEAP_PROPERTIES defaultHeap;
+    //memset(&defaultHeap, 0, sizeof(defaultHeap));
+    //defaultHeap.Type = D3D12_HEAP_TYPE_DEFAULT;
 
-    D3D12_HEAP_PROPERTIES  uploadheap;
-    memset(&uploadheap, 0, sizeof(uploadheap));
-    uploadheap.Type = D3D12_HEAP_TYPE_UPLOAD;
+    //D3D12_HEAP_PROPERTIES  uploadheap;
+    //memset(&uploadheap, 0, sizeof(uploadheap));
+    //uploadheap.Type = D3D12_HEAP_TYPE_UPLOAD;
 
-    //【3】创建顶点缓冲的资源描述
-    //创建VertexBuffer的资源描述
-    D3D12_RESOURCE_DESC DefaultVertexBufferDesc;
-    memset(&DefaultVertexBufferDesc, 0, sizeof(D3D12_RESOURCE_DESC));
-    DefaultVertexBufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-    DefaultVertexBufferDesc.Alignment = 0;
-    DefaultVertexBufferDesc.Width = vbByteSize;
-    DefaultVertexBufferDesc.Height = 1;
-    DefaultVertexBufferDesc.DepthOrArraySize = 1;
-    DefaultVertexBufferDesc.MipLevels = 1;
-    DefaultVertexBufferDesc.Format = DXGI_FORMAT_UNKNOWN;
-    DefaultVertexBufferDesc.SampleDesc.Count = 1;
-    DefaultVertexBufferDesc.SampleDesc.Quality = 0;
-    DefaultVertexBufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-    DefaultVertexBufferDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+    ////【3】创建顶点缓冲的资源描述
+    ////创建VertexBuffer的资源描述
+    //D3D12_RESOURCE_DESC DefaultVertexBufferDesc;
+    //memset(&DefaultVertexBufferDesc, 0, sizeof(D3D12_RESOURCE_DESC));
+    //DefaultVertexBufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    //DefaultVertexBufferDesc.Alignment = 0;
+    //DefaultVertexBufferDesc.Width = vbByteSize;
+    //DefaultVertexBufferDesc.Height = 1;
+    //DefaultVertexBufferDesc.DepthOrArraySize = 1;
+    //DefaultVertexBufferDesc.MipLevels = 1;
+    //DefaultVertexBufferDesc.Format = DXGI_FORMAT_UNKNOWN;
+    //DefaultVertexBufferDesc.SampleDesc.Count = 1;
+    //DefaultVertexBufferDesc.SampleDesc.Quality = 0;
+    //DefaultVertexBufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    //DefaultVertexBufferDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
-    //【4】创建VertexBuffer和VertexBufferUpload
-    //为VertexBuffer和VertexBufferUploader创建资源
-    // Create the actual default buffer resource.
-    ThrowIfFailed(md3dDevice->CreateCommittedResource(
-        &defaultHeap,
-        D3D12_HEAP_FLAG_NONE,
-        &DefaultVertexBufferDesc,
-        D3D12_RESOURCE_STATE_COPY_DEST,
-        nullptr,
-        IID_PPV_ARGS(VertexBufferGPU.GetAddressOf())));
+    ////【4】创建VertexBuffer和VertexBufferUpload
+    ////为VertexBuffer和VertexBufferUploader创建资源
+    //// Create the actual default buffer resource.
+    //ThrowIfFailed(md3dDevice->CreateCommittedResource(
+    //    &defaultHeap,
+    //    D3D12_HEAP_FLAG_NONE,
+    //    &DefaultVertexBufferDesc,
+    //    D3D12_RESOURCE_STATE_COPY_DEST,
+    //    nullptr,
+    //    IID_PPV_ARGS(VertexBufferGPU.GetAddressOf())));
 
-    ThrowIfFailed(md3dDevice->CreateCommittedResource(
-        &uploadheap,
-        D3D12_HEAP_FLAG_NONE,
-        &DefaultVertexBufferDesc,
-        D3D12_RESOURCE_STATE_GENERIC_READ,
-        nullptr,
-        IID_PPV_ARGS(VertexBufferUploader.GetAddressOf())));
+    //ThrowIfFailed(md3dDevice->CreateCommittedResource(
+    //    &uploadheap,
+    //    D3D12_HEAP_FLAG_NONE,
+    //    &DefaultVertexBufferDesc,
+    //    D3D12_RESOURCE_STATE_GENERIC_READ,
+    //    nullptr,
+    //    IID_PPV_ARGS(VertexBufferUploader.GetAddressOf())));
 
-    //【5】获取 VertexBuffer footprint
-    //获取 VertexBuffer footprint
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
-    UINT64  vertex_total_bytes = 0;
-    md3dDevice->GetCopyableFootprints(&DefaultVertexBufferDesc, 0, 1, 0, &footprint, nullptr, nullptr, &vertex_total_bytes);
-    VertexBufferUploader->Unmap(0, nullptr);
+    ////【5】获取 VertexBuffer footprint
+    ////获取 VertexBuffer footprint
+    //D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
+    //UINT64  vertex_total_bytes = 0;
+    //md3dDevice->GetCopyableFootprints(&DefaultVertexBufferDesc, 0, 1, 0, &footprint, nullptr, nullptr, &vertex_total_bytes);
+    //VertexBufferUploader->Unmap(0, nullptr);
 
-    //【6】映射内存地址,并把数据拷贝到VertexBufferUploader里
-    void* ptr_vertex = nullptr;
-    VertexBufferUploader->Map(0, nullptr, &ptr_vertex);
-    memcpy(reinterpret_cast<char*>(ptr_vertex) + footprint.Offset, vertices.data(), vbByteSize);
+    ////【6】映射内存地址,并把数据拷贝到VertexBufferUploader里
+    //void* ptr_vertex = nullptr;
+    //VertexBufferUploader->Map(0, nullptr, &ptr_vertex);
+    //memcpy(reinterpret_cast<char*>(ptr_vertex) + footprint.Offset, vertices.data(), vbByteSize);
 
-    //【7】拷贝，把VertexBufferUploader里的数据拷贝到VertexBufferGPU里
-    mCommandList->CopyBufferRegion(VertexBufferGPU.Get(), 0, VertexBufferUploader.Get(), 0, vertex_total_bytes);
+    ////【7】拷贝，把VertexBufferUploader里的数据拷贝到VertexBufferGPU里
+    //mCommandList->CopyBufferRegion(VertexBufferGPU.Get(), 0, VertexBufferUploader.Get(), 0, vertex_total_bytes);
 
-    //【8】为VertexBufferGPU插入资源屏障，因为一开始是以D3D12_RESOURCE_STATE_COPY_DEST的状态创建的资源，所以拷贝完以后需要给它设置好资源屏障。
-    D3D12_RESOURCE_BARRIER barrier_vertex;
-    memset(&barrier_vertex, 0, sizeof(barrier_vertex));
-    barrier_vertex.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrier_vertex.Transition.pResource = VertexBufferGPU.Get();
-    barrier_vertex.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    barrier_vertex.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-    barrier_vertex.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
-    mCommandList->ResourceBarrier(1, &barrier_vertex);
+    ////【8】为VertexBufferGPU插入资源屏障，因为一开始是以D3D12_RESOURCE_STATE_COPY_DEST的状态创建的资源，所以拷贝完以后需要给它设置好资源屏障。
+    //D3D12_RESOURCE_BARRIER barrier_vertex;
+    //memset(&barrier_vertex, 0, sizeof(barrier_vertex));
+    //barrier_vertex.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    //barrier_vertex.Transition.pResource = VertexBufferGPU.Get();
+    //barrier_vertex.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    //barrier_vertex.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    //barrier_vertex.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
+    //mCommandList->ResourceBarrier(1, &barrier_vertex);
 
-    //【9】创建IndexBuffer
-    // 到这里我们就完成了对VertexBuffer的处理，下面类似，需要对IndexBuffer进行处理，两者过程及其类似，我就不一步一步赘述了。
-    //创建IndexBuffer的资源描述
-    D3D12_RESOURCE_DESC DefaultIndexBufferDesc;
-    memset(&DefaultIndexBufferDesc, 0, sizeof(D3D12_RESOURCE_DESC));
-    DefaultIndexBufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-    DefaultIndexBufferDesc.Alignment = 0;
-    DefaultIndexBufferDesc.Width = ibByteSize;
-    DefaultIndexBufferDesc.Height = 1;
-    DefaultIndexBufferDesc.DepthOrArraySize = 1;
-    DefaultIndexBufferDesc.MipLevels = 1;
-    DefaultIndexBufferDesc.Format = DXGI_FORMAT_UNKNOWN;
-    DefaultIndexBufferDesc.SampleDesc.Count = 1;
-    DefaultIndexBufferDesc.SampleDesc.Quality = 0;
-    DefaultIndexBufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-    DefaultIndexBufferDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+    ////【9】创建IndexBuffer
+    //// 到这里我们就完成了对VertexBuffer的处理，下面类似，需要对IndexBuffer进行处理，两者过程及其类似，我就不一步一步赘述了。
+    ////创建IndexBuffer的资源描述
+    //D3D12_RESOURCE_DESC DefaultIndexBufferDesc;
+    //memset(&DefaultIndexBufferDesc, 0, sizeof(D3D12_RESOURCE_DESC));
+    //DefaultIndexBufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    //DefaultIndexBufferDesc.Alignment = 0;
+    //DefaultIndexBufferDesc.Width = ibByteSize;
+    //DefaultIndexBufferDesc.Height = 1;
+    //DefaultIndexBufferDesc.DepthOrArraySize = 1;
+    //DefaultIndexBufferDesc.MipLevels = 1;
+    //DefaultIndexBufferDesc.Format = DXGI_FORMAT_UNKNOWN;
+    //DefaultIndexBufferDesc.SampleDesc.Count = 1;
+    //DefaultIndexBufferDesc.SampleDesc.Quality = 0;
+    //DefaultIndexBufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    //DefaultIndexBufferDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
-    //为IndexBuffer和IndexBufferUploader创建资源
-    ThrowIfFailed(md3dDevice->CreateCommittedResource(
-        &defaultHeap,
-        D3D12_HEAP_FLAG_NONE,
-        &DefaultIndexBufferDesc,
-        D3D12_RESOURCE_STATE_COPY_DEST,
-        nullptr,
-        IID_PPV_ARGS(IndexBufferGPU.GetAddressOf())));
+    ////为IndexBuffer和IndexBufferUploader创建资源
+    //ThrowIfFailed(md3dDevice->CreateCommittedResource(
+    //    &defaultHeap,
+    //    D3D12_HEAP_FLAG_NONE,
+    //    &DefaultIndexBufferDesc,
+    //    D3D12_RESOURCE_STATE_COPY_DEST,
+    //    nullptr,
+    //    IID_PPV_ARGS(IndexBufferGPU.GetAddressOf())));
 
-    ThrowIfFailed(md3dDevice->CreateCommittedResource(
-        &uploadheap,
-        D3D12_HEAP_FLAG_NONE,
-        &DefaultIndexBufferDesc,
-        D3D12_RESOURCE_STATE_GENERIC_READ,
-        nullptr,
-        IID_PPV_ARGS(IndexBufferUploader.GetAddressOf())));
-
-
-    //获取 IndexBuffer footprint
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT indexBufferFootprint;
-    UINT64  index_total_bytes = 0;
-    md3dDevice->GetCopyableFootprints(&DefaultIndexBufferDesc, 0, 1, 0, &indexBufferFootprint, nullptr, nullptr, &index_total_bytes);
+    //ThrowIfFailed(md3dDevice->CreateCommittedResource(
+    //    &uploadheap,
+    //    D3D12_HEAP_FLAG_NONE,
+    //    &DefaultIndexBufferDesc,
+    //    D3D12_RESOURCE_STATE_GENERIC_READ,
+    //    nullptr,
+    //    IID_PPV_ARGS(IndexBufferUploader.GetAddressOf())));
 
 
-    //映射内存地址,并把数据拷贝到IndexBufferUploader里
-    void* ptr_index = nullptr;
-    IndexBufferUploader->Map(0, nullptr, &ptr_index);
-    memcpy(reinterpret_cast<char*>(ptr_index) + indexBufferFootprint.Offset, indices.data(), ibByteSize);
-    IndexBufferUploader->Unmap(0, nullptr);
+    ////获取 IndexBuffer footprint
+    //D3D12_PLACED_SUBRESOURCE_FOOTPRINT indexBufferFootprint;
+    //UINT64  index_total_bytes = 0;
+    //md3dDevice->GetCopyableFootprints(&DefaultIndexBufferDesc, 0, 1, 0, &indexBufferFootprint, nullptr, nullptr, &index_total_bytes);
 
-    //拷贝，把IndexBufferUploader里的数据拷贝到IndexBufferGPU里
-    mCommandList->CopyBufferRegion(IndexBufferGPU.Get(), 0, IndexBufferUploader.Get(), 0, index_total_bytes);
 
-    //为IndexBufferGPU插入资源屏障
-    D3D12_RESOURCE_BARRIER barrier_index;
-    memset(&barrier_index, 0, sizeof(barrier_index));
-    barrier_index.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrier_index.Transition.pResource = IndexBufferGPU.Get();
-    barrier_index.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    barrier_index.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-    barrier_index.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
-    mCommandList->ResourceBarrier(1, &barrier_index);
+    ////映射内存地址,并把数据拷贝到IndexBufferUploader里
+    //void* ptr_index = nullptr;
+    //IndexBufferUploader->Map(0, nullptr, &ptr_index);
+    //memcpy(reinterpret_cast<char*>(ptr_index) + indexBufferFootprint.Offset, indices.data(), ibByteSize);
+    //IndexBufferUploader->Unmap(0, nullptr);
 
-    //【10】最后我们用VertexBufferGPU和IndexBufferGPU创建VerteBufferView和IndexBufferView来渲染。
+    ////拷贝，把IndexBufferUploader里的数据拷贝到IndexBufferGPU里
+    //mCommandList->CopyBufferRegion(IndexBufferGPU.Get(), 0, IndexBufferUploader.Get(), 0, index_total_bytes);
 
-    //VertexBufferView
-    vbv.BufferLocation = VertexBufferGPU->GetGPUVirtualAddress();
-    vbv.StrideInBytes = sizeof(Vertex);
-    vbv.SizeInBytes = vbByteSize;
+    ////为IndexBufferGPU插入资源屏障
+    //D3D12_RESOURCE_BARRIER barrier_index;
+    //memset(&barrier_index, 0, sizeof(barrier_index));
+    //barrier_index.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    //barrier_index.Transition.pResource = IndexBufferGPU.Get();
+    //barrier_index.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    //barrier_index.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    //barrier_index.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
+    //mCommandList->ResourceBarrier(1, &barrier_index);
 
-    //IndexBufferView
-    ibv.BufferLocation = IndexBufferGPU->GetGPUVirtualAddress();
-    ibv.Format = DXGI_FORMAT_R32_UINT;
-    ibv.SizeInBytes = ibByteSize;
+    ////【10】最后我们用VertexBufferGPU和IndexBufferGPU创建VerteBufferView和IndexBufferView来渲染。
 
-    //设置顶点缓冲区
-    mCommandList->IASetVertexBuffers(0, 1, &vbv);
-    mCommandList->IASetIndexBuffer(&ibv);
+    ////VertexBufferView
+    //vbv.BufferLocation = VertexBufferGPU->GetGPUVirtualAddress();
+    //vbv.StrideInBytes = sizeof(Vertex);
+    //vbv.SizeInBytes = vbByteSize;
 
-    Shader shader(md3dDevice);
-    mpShader = &shader;
+    ////IndexBufferView
+    //ibv.BufferLocation = IndexBufferGPU->GetGPUVirtualAddress();
+    //ibv.Format = DXGI_FORMAT_R32_UINT;
+    //ibv.SizeInBytes = ibByteSize;
+
+    ////设置顶点缓冲区
+    //mCommandList->IASetVertexBuffers(0, 1, &vbv);
+    //mCommandList->IASetIndexBuffer(&ibv);
+
+    //Shader shader(md3dDevice);
+    //mpShader = &shader;
+
 
     //ThrowIfFailed(D3DCreateBlob(vbByteSize, &VertexBufferGPU));	//创建顶点数据内存空间
     //ThrowIfFailed(D3DCreateBlob(ibByteSize, &IndexBufferGPU));	//创建索引数据内存空间
     //CopyMemory(vertexBufferCpu->GetBufferPointer(), vertices.data(), vbByteSize);	//将顶点数据拷贝至顶点系统内存中
     //CopyMemory(indexBufferCpu->GetBufferPointer(), indices.data(), ibByteSize);	//将索引数据拷贝至索引系统内存中
-    //VertexBufferGPU = CreateDefaultBuffer(md3dDevice.Get(), mCommandList.Get(), vbByteSize, vertices.data(), vertexBufferUploader);
+    VertexBufferGPU = CreateDefaultBuffer(vbByteSize, &vertices, VertexBufferUploader);
+    IndexBufferGPU = CreateDefaultBuffer(ibByteSize, &indices, IndexBufferUploader);
     //IndexBufferGPU = CreateDefaultBuffer(d3dDevice.Get(), cmdList.Get(), ibByteSize, indices.data(), indexBufferUploader);
 
-    D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-    ZeroMemory(&psoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
-    psoDesc.InputLayout = { shader.inputLayoutDesc.data(), (UINT)shader.inputLayoutDesc.size() };
-    psoDesc.pRootSignature = shader.rootSignature.Get();
-    psoDesc.VS = { reinterpret_cast<BYTE*>(shader.vsBytecode->GetBufferPointer()), shader.vsBytecode->GetBufferSize() };
-    psoDesc.PS = { reinterpret_cast<BYTE*>(shader.psBytecode->GetBufferPointer()), shader.psBytecode->GetBufferSize() };
-    psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-    psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-    psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-    psoDesc.SampleMask = UINT_MAX;	//0xffffffff,全部采样，没有遮罩
-    psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-    psoDesc.NumRenderTargets = 1;
-    psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;	//归一化的无符号整型
-    psoDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
-    psoDesc.SampleDesc.Count = 1;	//不使用4XMSAA
-    psoDesc.SampleDesc.Quality = 0;	////不使用4XMSAA
+    //D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+    //ZeroMemory(&psoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+    //psoDesc.InputLayout = { shader.inputLayoutDesc.data(), (UINT)shader.inputLayoutDesc.size() };
+    //psoDesc.pRootSignature = shader.rootSignature.Get();
+    //psoDesc.VS = { reinterpret_cast<BYTE*>(shader.vsBytecode->GetBufferPointer()), shader.vsBytecode->GetBufferSize() };
+    //psoDesc.PS = { reinterpret_cast<BYTE*>(shader.psBytecode->GetBufferPointer()), shader.psBytecode->GetBufferSize() };
+    //psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+    //psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+    //psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+    //psoDesc.SampleMask = UINT_MAX;	//0xffffffff,全部采样，没有遮罩
+    //psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    //psoDesc.NumRenderTargets = 1;
+    //psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;	//归一化的无符号整型
+    //psoDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    //psoDesc.SampleDesc.Count = 1;	//不使用4XMSAA
+    //psoDesc.SampleDesc.Quality = 0;	////不使用4XMSAA
 
-    ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&PSO)));
+    //ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&PSO)));
 
-    ThrowIfFailed(md3dDevice->CreateRootSignature(0,
-        shader.serializedRootSig->GetBufferPointer(),
-        shader.serializedRootSig->GetBufferSize(),
-        IID_PPV_ARGS(&(shader.rootSignature))));
+    //ThrowIfFailed(md3dDevice->CreateRootSignature(0,
+    //    shader.serializedRootSig->GetBufferPointer(),
+    //    shader.serializedRootSig->GetBufferSize(),
+    //    IID_PPV_ARGS(&(shader.rootSignature))));
 
-    //D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc;
-    //cbvHeapDesc.NumDescriptors = 1;
-    //cbvHeapDesc.Type =
-    //    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-    //cbvHeapDesc.Flags =
-    //    D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-    //cbvHeapDesc.NodeMask = 0;
-    //ThrowIfFailed(md3dDevice -> CreateDescriptorHeap(&cbvHeapDesc,
-    //        IID_PPV_ARGS(&mCbvHeap)));
+    D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc;
+    cbvHeapDesc.NumDescriptors = 1;
+    cbvHeapDesc.Type =
+        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    cbvHeapDesc.Flags =
+        D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    cbvHeapDesc.NodeMask = 0;
+
+    ThrowIfFailed(md3dDevice -> CreateDescriptorHeap(&cbvHeapDesc,
+            IID_PPV_ARGS(&mCbvHeap)));
 }
 
 /// <summary>
@@ -715,34 +935,45 @@ void QDirect3D12Widget::CreateBuffer()
 ComPtr<ID3D12Resource> QDirect3D12Widget::CreateDefaultBuffer
     (UINT64 byteSize, const void* initData, ComPtr<ID3D12Resource>& uploadBuffer)
 {
-    //创建上传堆，作用是：写入CPU内存数据，并传输给默认堆
-    ThrowIfFailed(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), //创建上传堆类型的堆
-        D3D12_HEAP_FLAG_NONE,
-        &CD3DX12_RESOURCE_DESC::Buffer(byteSize),//变体的构造函数，传入byteSize，其他均为默认值，简化书写
-        D3D12_RESOURCE_STATE_GENERIC_READ,	//上传堆里的资源需要复制给默认堆，所以是可读状态
-        nullptr,	//不是深度模板资源，不用指定优化值
-        IID_PPV_ARGS(&uploadBuffer)));
-
     //创建默认堆，作为上传堆的数据传输对象
     ComPtr<ID3D12Resource> defaultBuffer;
+
+    // Create the actual default buffer resource.
     ThrowIfFailed(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),//创建默认堆类型的堆
         D3D12_HEAP_FLAG_NONE,
         &CD3DX12_RESOURCE_DESC::Buffer(byteSize),
         D3D12_RESOURCE_STATE_COMMON,//默认堆为最终存储数据的地方，所以暂时初始化为普通状态
         nullptr,
-        IID_PPV_ARGS(&defaultBuffer)));
+        IID_PPV_ARGS(defaultBuffer.GetAddressOf())));
 
-    //将资源从COMMON状态转换到COPY_DEST状态（默认堆此时作为接收数据的目标）
-    mCommandList->ResourceBarrier(1,
-        &CD3DX12_RESOURCE_BARRIER::Transition(defaultBuffer.Get(),
-            D3D12_RESOURCE_STATE_COMMON,
-            D3D12_RESOURCE_STATE_COPY_DEST));
+    // 创建上传堆，作用是：写入CPU内存数据，并传输给默认堆
+    // In order to copy CPU memory data into our default buffer, we need
+    // to create an intermediate upload heap.
+    ThrowIfFailed(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), //创建上传堆类型的堆
+        D3D12_HEAP_FLAG_NONE,
+        &CD3DX12_RESOURCE_DESC::Buffer(byteSize),//变体的构造函数，传入byteSize，其他均为默认值，简化书写
+        D3D12_RESOURCE_STATE_GENERIC_READ,	//上传堆里的资源需要复制给默认堆，所以是可读状态
+        nullptr,	//不是深度模板资源，不用指定优化值
+        IID_PPV_ARGS(uploadBuffer.GetAddressOf())));
 
+    // Describe the data we want to copy into the default buffer.
     //将数据从CPU内存拷贝到GPU缓存
     D3D12_SUBRESOURCE_DATA subResourceData;
     subResourceData.pData = initData;
     subResourceData.RowPitch = byteSize;
     subResourceData.SlicePitch = subResourceData.RowPitch;
+
+    //将资源从COMMON状态转换到COPY_DEST状态（默认堆此时作为接收数据的目标）
+    // Schedule to copy the data to the default buffer resource. 
+    // At a high level, the helper function UpdateSubresources 
+    // will copy the CPU memory into the intermediate upload heap. 
+    // Then, using ID3D12CommandList::CopySubresourceRegion, 
+    // the intermediate upload heap data will be copied to mBuffer.
+    mCommandList->ResourceBarrier(1,
+        &CD3DX12_RESOURCE_BARRIER::Transition(defaultBuffer.Get(),
+            D3D12_RESOURCE_STATE_COMMON,
+            D3D12_RESOURCE_STATE_COPY_DEST));
+
     //核心函数UpdateSubresources，将数据从CPU内存拷贝至上传堆，再从上传堆拷贝至默认堆。1是最大的子资源的下标（模板中定义，意为有2个子资源）
     UpdateSubresources<1>(mCommandList.Get(), defaultBuffer.Get(), uploadBuffer.Get(), 0, 0, 1, &subResourceData);
 
@@ -752,6 +983,11 @@ ComPtr<ID3D12Resource> QDirect3D12Widget::CreateDefaultBuffer
             D3D12_RESOURCE_STATE_COPY_DEST,
             D3D12_RESOURCE_STATE_GENERIC_READ));
 
+    // Note: uploadBuffer has to be kept alive after the above function 
+    // calls because the command list has not been executed yet that 
+    // performs the actual copy. 
+    // The caller can Release the uploadBuffer after it knows the copy 
+    // has been executed.
     return defaultBuffer;
 }
 /// <summary>
@@ -813,6 +1049,51 @@ void QDirect3D12Widget::resizeEvent(QResizeEvent * event)
 
     QWidget::resizeEvent(event);
 }
+int i = 0;
+
+int mLastMousePosx = 0;
+int mLastMousePosy = 0;
+
+void QDirect3D12Widget::Update()
+{
+     //Convert Spherical to Cartesian coordinates. 
+    float x = mRadius*sinf(mPhi)*cosf(mTheta); 
+    float z = mRadius*sinf(mPhi)*sinf(mTheta); 
+    float y = mRadius*cosf(mPhi); 
+    // Build the view matrix. 
+    
+    XMVECTOR pos = XMVectorSet(x, y, z, 1.0f); 
+    XMVECTOR target = XMVectorZero(); 
+    XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f); 
+    XMMATRIX view = XMMatrixLookAtLH(pos, target, up); 
+    XMStoreFloat4x4(&mView, view); 
+    XMMATRIX world = XMLoadFloat4x4(&mWorld); 
+    XMMATRIX proj = XMLoadFloat4x4(&mProj);
+
+    XMMATRIX worldViewProj = world * view * proj; // Update the constant buffer with the latest worldViewProj matrix. ObjectConstants objConstants; XMStoreFloat4x4(&objConstants.WorldViewProj, XMMatrixTranspose(worldViewProj)); mObjectCB->CopyData(0, objConstants);
+    // Update the constant buffer with the latest worldViewProj matrix.
+    ObjectConstants objConstants;
+    XMStoreFloat4x4(&objConstants.WorldViewProj,
+        XMMatrixTranspose(worldViewProj));
+    mObjectCB->CopyData(0, objConstants);
+}
+
+void QDirect3D12Widget::OnMouseMove(QMouseEvent* event)
+{
+    int x = event->pos().x();
+    int y = event->pos().y();
+
+    float dx = XMConvertToRadians(0.25f * static_cast<float> (x - mLastMousePosx));
+    float dy = XMConvertToRadians(0.25f * static_cast<float> (y - mLastMousePosy));
+
+    mTheta += dx; 
+    mPhi += dy;
+
+    mPhi = MathHelper::Clamp(mPhi, 0.1f, MathHelper::Pi - 0.1f);
+    // 
+    mLastMousePosx = x;
+    mLastMousePosy = y;
+}
 
 bool QDirect3D12Widget::event(QEvent * event)
 {
@@ -845,6 +1126,7 @@ bool QDirect3D12Widget::event(QEvent * event)
             emit keyPressed((QKeyEvent *)event);
             break;
         case QEvent::MouseMove:
+            OnMouseMove((QMouseEvent*)event);
             emit mouseMoved((QMouseEvent *)event);
             break;
         case QEvent::MouseButtonPress:

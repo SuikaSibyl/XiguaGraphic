@@ -19,6 +19,8 @@
 #include <GameTimer.h>
 
 #include <Shader.h>
+#include <UploadBuffer.h>
+#include <MeshGeometry.h>
 
 using Microsoft::WRL::ComPtr;
 
@@ -177,4 +179,35 @@ protected:
     bool m_bStarted;
 
     D3DCOLORVALUE m_BackColor;
+
+    /// <summary>
+    /// 
+    /// </summary>
+    void Update();
+    void OnMouseMove(QMouseEvent*);
+
+    bool m4xMsaaState = false; // 4X MSAA enabled
+    UINT m4xMsaaQuality = 0; // quality level of 4X MSAA
+
+    DXGI_FORMAT mBackBufferFormat =
+        DXGI_FORMAT_R8G8B8A8_UNORM;
+
+    DXGI_FORMAT mDepthStencilFormat =
+        DXGI_FORMAT_D24_UNORM_S8_UINT;
+    ComPtr<ID3D12PipelineState> mPSO = nullptr;
+    ComPtr<ID3DBlob> vsBytecode = nullptr;
+    ComPtr<ID3DBlob> psBytecode = nullptr;
+    ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
+    std::unique_ptr<UploadBuffer<ObjectConstants>> mObjectCB = nullptr;
+    std::unique_ptr<MeshGeometry> mBoxGeo = nullptr;
+
+    DirectX::XMFLOAT4X4 mWorld = MathHelper::Identity4x4();
+    DirectX::XMFLOAT4X4 mView = MathHelper::Identity4x4();
+    DirectX::XMFLOAT4X4 mProj = MathHelper::Identity4x4();
+
+    float mTheta = 1.5f * DirectX::XM_PI;
+    float mPhi = DirectX::XM_PIDIV4;
+    float mRadius = 5.0f;
+
+
 };

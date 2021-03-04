@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #pragma comment(lib, "D3D12.lib")
 #pragma comment(lib,"d3dcompiler.lib")
@@ -26,6 +26,7 @@
 #include <windowsx.h>
 #include <comdef.h>
 #include "d3dx12.h"
+#include <MathHelper.h>
 
 using Microsoft::WRL::ComPtr;
 
@@ -72,3 +73,10 @@ inline void ThrowIfFailed(HRESULT hr)
 }
 
 #define DXCall(func) ThrowIfFailed(func)
+
+namespace Utils
+{
+    UINT CalcConstantBufferByteSize(UINT byteSize);
+}
+
+struct ObjectConstants { DirectX::XMFLOAT4X4 WorldViewProj = MathHelper::Identity4x4(); };
