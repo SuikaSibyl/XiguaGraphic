@@ -45,9 +45,6 @@ SuikaGraphics::SuikaGraphics(QWidget *parent)
     adjustWindowSize();
     addToolbarWidgets();
     connectSlots();
-
-    timer.Start();
-    timer.Reset();
 }
 
 SuikaGraphics::~SuikaGraphics() = default;
@@ -121,24 +118,8 @@ void SuikaGraphics::tick()
     // TODO: Update the scene here.
     // m_pMesh->Tick();
 
-    timer.Tick();
-    frameCnt++;
-
-    // Compute averages over one second period.
-            //timer.TotalTime() - timeElapsed >= 1.0f代表度过了一秒的时间
-            //在一秒末统计这一秒刷过的帧数
-    if ((timer.TotalTime() - timeElapsed) >= 1.0f)
-    {
-        float fps = (float)frameCnt; // fps = frameCnt / 1
-        float mspf = 1000.0f / fps;
-
-        fpsShower->setText(QString("fps: ") + QString::number(fps));
-        timeShower->setText(QString("run time: ") + QString::number(int(timer.TotalTime())));
-
-        // Reset for next average.
-        frameCnt = 0;
-        timeElapsed += 1.0f;
-    }
+    fpsShower->setText(QString("fps: ") + QString::number(m_pScene->m_Fps));
+    timeShower->setText(QString("run time: ") + QString::number(int(m_pScene->m_TotalTime)));
 }
 
 void SuikaGraphics::render(ID3D12GraphicsCommandList* cl)

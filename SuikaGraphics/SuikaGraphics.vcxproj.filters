@@ -31,6 +31,9 @@
     <Filter Include="Source Files\QtInterface">
       <UniqueIdentifier>{fc480f90-2066-4535-a13e-77cb4669dcd8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shader Files">
+      <UniqueIdentifier>{99da4717-d970-45d4-b103-11a51cc1083b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="SuikaGraphics.qrc">
@@ -56,15 +59,21 @@
     <ClCompile Include="source\Utility\Utility.cpp">
       <Filter>Source Files\Utility</Filter>
     </ClCompile>
+    <ClCompile Include="source\Utility\Shader.cpp">
+      <Filter>Source Files\Utility</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="source\QDirect3D12Widget\d3dx12.h">
-      <Filter>Source Files\QDirect3D12Widget</Filter>
-    </ClInclude>
     <ClInclude Include="header\GameTimer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="header\Utility.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Shader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="header\d3dx12.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

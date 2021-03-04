@@ -3,7 +3,7 @@
 #pragma comment(lib, "D3D12.lib")
 #pragma comment(lib,"d3dcompiler.lib")
 #pragma comment(lib, "dxgi.lib")
-
+#pragma comment(lib, "dxguid.lib")
 
 #include <stdexcept>
 
@@ -14,10 +14,11 @@
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include <D3Dcompiler.h>
-#include "d3dx12.h"
 
 #include <Utility.h>
 #include <GameTimer.h>
+
+#include <Shader.h>
 
 using Microsoft::WRL::ComPtr;
 
@@ -30,30 +31,19 @@ public:
     ~QDirect3D12Widget();
 
     void release();
-    void resetEnvironment();
-
     void run();
     void pauseFrames();
     void continueFrames();
+
+public:
+    int m_Fps;
+    int m_TotalTime;
 
 private:
     // Lifespan
     bool init();
 
-    void getHardwareAdapter(IDXGIFactory2 * pFactory, IDXGIAdapter1 ** ppAdapter);
-    void resizeSwapChain(int width, int height);
-    void cleanupRenderTarget();
-    void createRenderTarget();
-
-    void beginScene();
-    void endScene();
-
     void tick();
-    void render();
-
-    void waitForGpu();
-    void moveToNextFrame();
-
     bool InitDirect3D();
 #pragma region InitializeSubFunctions
     void CreateDevice();
@@ -71,7 +61,15 @@ private:
     void FlushCmdQueue();
     void CalculateFrameState();
     void Draw();
+    void CreateBuffer();
+    ComPtr<ID3D12Resource> CreateDefaultBuffer
+        (UINT64 byteSize, const void* initData, ComPtr<ID3D12Resource>& uploadBuffer);
 
+    ComPtr<ID3D12PipelineState> PSO;
+    ComPtr<ID3D12DescriptorHeap> mCbvHeap = nullptr;
+    D3D12_VERTEX_BUFFER_VIEW vbv;
+    D3D12_INDEX_BUFFER_VIEW ibv;
+    Shader* mpShader;
 
 protected:
     int mCurrentFence = 0;	//初始CPU上的围栏点为0
@@ -90,6 +88,21 @@ protected:
     UINT rtvDescriptorSize;
     UINT dsvDescriptorSize;
     UINT cbv_srv_uavDescriptorSize;
+
+    void DrawBox(const GameTimer& gt);
+
+    void BuildDescriptorHeaps();
+    void BuildConstantBuffers();
+    void BuildRootSignature();
+    void BuildShadersAndInputLayout();
+    void BuildBoxGeometry();
+    void BuildPSO();
+    //Default buffer
+    ComPtr<ID3D12Resource> VertexBufferGPU = nullptr;
+    ComPtr<ID3D12Resource> IndexBufferGPU = nullptr;
+    //Upload buffer
+    ComPtr<ID3D12Resource> VertexBufferUploader = nullptr;
+    ComPtr<ID3D12Resource> IndexBufferUploader = nullptr;
 
     ComPtr<ID3D12Device>    md3dDevice;
     ComPtr<IDXGIFactory4>   dxgiFactory;
@@ -146,10 +159,6 @@ private slots:
 public:
     HWND const & nativeHandle() const { return m_hWnd; }
 
-    ID3D12Device *              device() const { return m_pDevice; }
-    IDXGISwapChain *            swapChain() { return m_pSwapChain; }
-    ID3D12GraphicsCommandList * commandList() const { return m_pCommandList; }
-
     bool renderActive() const { return m_bRenderActive; }
     void setRenderActive(bool active) { m_bRenderActive = active; }
 
@@ -157,38 +166,13 @@ public:
 
 protected:
 
-    // Pipeline objects.
-    static int const FRAME_COUNT = 3;
-    UINT             m_iCurrFrameIndex;
-
-    ID3D12Device* m_pDevice;
-    IDXGIFactory4* m_pFactory;
-    IDXGISwapChain3* m_pSwapChain;
-    ID3D12CommandQueue* m_pCommandQueue;
-    ID3D12CommandAllocator* m_pCommandAllocators[FRAME_COUNT];
-    ID3D12GraphicsCommandList* m_pCommandList;
-
-
     D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS msaaQualityLevels;
-
-    ID3D12DescriptorHeap *      m_pRTVDescHeap;
-    UINT                        m_iRTVDescSize; // May vary from device to device.
-    ID3D12Resource *            m_pRTVResources[FRAME_COUNT];
-    D3D12_CPU_DESCRIPTOR_HANDLE m_RTVDescriptors[FRAME_COUNT];
-    ID3D12DescriptorHeap *      m_pSrvDescHeap;
-
-    // Synchronization objects.
-    HANDLE        m_hSwapChainEvent;
-    HANDLE        m_hFenceEvent;
-    ID3D12Fence * m_pFence;
-    UINT64        m_iFenceValues[FRAME_COUNT];
 
     // Widget objects.
     QTimer m_qTimer;
 
     HWND m_hWnd;
     bool m_bDeviceInitialized;
-
     bool m_bRenderActive;
     bool m_bStarted;
 

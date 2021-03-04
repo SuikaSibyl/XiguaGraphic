@@ -1,41 +1,27 @@
 #include "QDirect3D12Widget.h"
 #include <DirectXColors.h>
 
+#include <array>
 #include <QDebug>
 #include <QEvent>
 #include <QWheelEvent>
+#include <DirectXMath.h>
+
+#include <Shader.h>
 
 using Microsoft::WRL::ComPtr;
+using namespace DirectX;
 
 constexpr int FPS_LIMIT    = 120.0f;
 constexpr int MS_PER_FRAME = (int)((1.0f / FPS_LIMIT) * 1000.0f);
 
 QDirect3D12Widget::QDirect3D12Widget(QWidget * parent)
     : QWidget(parent)
-    , m_iCurrFrameIndex(0)
-    , m_pDevice(Q_NULLPTR)
-    , m_pFactory(Q_NULLPTR)
-    , m_pSwapChain(Q_NULLPTR)
-    , m_pCommandQueue(Q_NULLPTR)
-    , m_pCommandAllocators{}
-    , m_pCommandList(Q_NULLPTR)
-    , m_pRTVDescHeap(Q_NULLPTR)
-    , m_iRTVDescSize(0)
-    , m_pRTVResources{}
-    , m_RTVDescriptors{}
-    , m_pSrvDescHeap(Q_NULLPTR)
-    , m_hSwapChainEvent(Q_NULLPTR)
-    , m_hFenceEvent(Q_NULLPTR)
-    , m_pFence(Q_NULLPTR)
-    , m_iFenceValues{}
     , m_hWnd(reinterpret_cast<HWND>(winId()))
     , m_bDeviceInitialized(false)
     , m_bRenderActive(false)
     , m_bStarted(false)
-    , m_BackColor{0.0f, 0.135f, 0.481f, 1.0f}
 {
-    qDebug() << "[QDirect3D12Widget::QDirect3D12Widget] - Widget Handle: " << m_hWnd;
-
     QPalette pal = palette();
     pal.setColor(QPalette::Window, Qt::black);
     setAutoFillBackground(true);
@@ -57,8 +43,6 @@ void QDirect3D12Widget::release()
     m_bDeviceInitialized = false;
     disconnect(&m_qTimer, &QTimer::timeout, this, &QDirect3D12Widget::onFrame);
     m_qTimer.stop();
-
-    //waitForGpu();
 }
 
 void QDirect3D12Widget::run()
@@ -73,6 +57,7 @@ void QDirect3D12Widget::pauseFrames()
 
     disconnect(&m_qTimer, &QTimer::timeout, this, &QDirect3D12Widget::onFrame);
     m_qTimer.stop();
+    timer.Stop();
     m_bRenderActive = false;
 }
 
@@ -82,6 +67,7 @@ void QDirect3D12Widget::continueFrames()
 
     connect(&m_qTimer, &QTimer::timeout, this, &QDirect3D12Widget::onFrame);
     m_qTimer.start(MS_PER_FRAME);
+    timer.Start();
     m_bRenderActive = true;
 }
 
@@ -99,6 +85,15 @@ void QDirect3D12Widget::showEvent(QShowEvent * event)
 bool QDirect3D12Widget::init()
 {
     InitDirect3D();
+
+    mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr);
+
+    CreateBuffer();
+    ThrowIfFailed(mCommandList->Close());
+    ID3D12CommandList* cmdLists[] = { mCommandList.Get() };
+    mCommandQueue->ExecuteCommandLists(_countof(cmdLists), cmdLists);
+
+    FlushCmdQueue();
 
     connect(&m_qTimer, &QTimer::timeout, this, &QDirect3D12Widget::onFrame);
 
@@ -152,17 +147,67 @@ void QDirect3D12Widget::CalculateFrameState()
         float fps = (float)frameCnt;//每秒多少帧
         float mspf = 1000.0f / fps;	//每帧多少毫秒
 
-        std::wstring fpsStr = std::to_wstring(fps);//转为宽字符
-        std::wstring mspfStr = std::to_wstring(mspf);
-        //将帧数据显示在窗口上
-        std::wstring windowText = L"D3D12Init    fps:" + fpsStr + L"    " + L"mspf" + mspfStr;
-        SetWindowText((HWND)winId(), windowText.c_str());
+        m_Fps = fps;
+        m_TotalTime = timer.TotalTime();
 
         //为计算下一组帧数值而重置
         frameCnt = 0;
         timeElapsed += 1.0f;
     }
 }
+//定义顶点结构体
+struct Vertex
+{
+    XMFLOAT3 Pos;
+    XMFLOAT4 Color;
+};
+
+//实例化顶点结构体并填充
+std::array<Vertex, 8> vertices =
+{
+    Vertex({ XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT4(Colors::White) }),
+    Vertex({ XMFLOAT3(-1.0f, +1.0f, -1.0f), XMFLOAT4(Colors::Black) }),
+    Vertex({ XMFLOAT3(+1.0f, +1.0f, -1.0f), XMFLOAT4(Colors::Red) }),
+    Vertex({ XMFLOAT3(+1.0f, -1.0f, -1.0f), XMFLOAT4(Colors::Green) }),
+    Vertex({ XMFLOAT3(-1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Blue) }),
+    Vertex({ XMFLOAT3(-1.0f, +1.0f, +1.0f), XMFLOAT4(Colors::Yellow) }),
+    Vertex({ XMFLOAT3(+1.0f, +1.0f, +1.0f), XMFLOAT4(Colors::Cyan) }),
+    Vertex({ XMFLOAT3(+1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Magenta) })
+};
+
+std::array<std::uint16_t, 36> indices =
+
+{
+    //前
+    0, 1, 2,
+    0, 2, 3,
+
+    //后
+    4, 6, 5,
+    4, 7, 6,
+
+    //左
+    4, 5, 1,
+    4, 1, 0,
+
+    //右
+    3, 2, 6,
+    3, 6, 7,
+
+    //上
+    1, 5, 6,
+    1, 6, 2,
+
+    //下
+    4, 0, 3,
+    4, 3, 7
+};
+const UINT vbByteSize = (UINT)vertices.size() * sizeof(Vertex);
+const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint32_t);
+
+/// <summary>
+/// 
+/// </summary>
 void QDirect3D12Widget::Draw()
 {
     //首先重置命令分配器cmdAllocator和命令列表cmdList，目的是重置命令和列表，复用相关内存。
@@ -189,11 +234,36 @@ void QDirect3D12Widget::Draw()
         0,	//裁剪矩形数量
         nullptr);	//裁剪矩形指针
 
+    D3D12_VERTEX_BUFFER_VIEW vbv;
+    vbv.BufferLocation = VertexBufferGPU->GetGPUVirtualAddress();//顶点缓冲区资源虚拟地址
+    vbv.SizeInBytes = vbByteSize;	//顶点缓冲区大小（所有顶点数据大小）
+    vbv.StrideInBytes = sizeof(Vertex);	//每个顶点元素所占用的字节数
+
+    //设置CBV描述符堆
+    //ID3D12DescriptorHeap* descriHeaps[] = { mCbvHeap.Get() };//注意这里之所以是数组，是因为还可能包含SRV和UAV，而这里我们只用到了CBV
+    //mCommandList->SetDescriptorHeaps(_countof(descriHeaps), descriHeaps);
+    ////设置根签名
+    //mCommandList->SetGraphicsRootSignature(mpShader->rootSignature.Get());
+    ////将图元拓扑类型传入流水线
+    //mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    ////设置根描述符表
+    //mCommandList->SetGraphicsRootDescriptorTable(0, //根参数的起始索引
+    //    mCbvHeap->GetGPUDescriptorHandleForHeapStart());
+
+    ////绘制顶点（通过索引缓冲区绘制）
+    //mCommandList->DrawIndexedInstanced(sizeof(indices), //每个实例要绘制的索引数
+    //    1,	//实例化个数
+    //    0,	//起始索引位置
+    //    0,	//子物体起始索引在全局索引中的位置
+    //    0);	//实例化的高级技术，暂时设置为0
+
     //然后我们指定将要渲染的缓冲区，即指定RTV和DSV。
     mCommandList->OMSetRenderTargets(1,//待绑定的RTV数量
         &rtvHandle,	//指向RTV数组的指针
         true,	//RTV对象在堆内存中是连续存放的
         &dsvHandle);	//指向DSV的指针
+
+
 
     //等到渲染完成，我们要将后台缓冲区的状态改成呈现状态，使其之后推到前台缓冲区显示。完了，关闭命令列表，等待传入命令队列。
     mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(swapChainBuffer[ref_mCurrentBackBuffer].Get(),
@@ -209,12 +279,7 @@ void QDirect3D12Widget::Draw()
     ref_mCurrentBackBuffer = (ref_mCurrentBackBuffer + 1) % 2;
 
     FlushCmdQueue();
-
-    //beginScene();
-    //render();
-    //endScene();
 }
-
 
 #pragma region Initialize
 bool QDirect3D12Widget::InitDirect3D()
@@ -448,154 +513,250 @@ void QDirect3D12Widget::CreateViewPortAndScissorRect()
 }
 #pragma endregion
 
-#pragma region Deprecated
-//void QDirect3D12Widget::create3DDevice()
-//{
-//    // 1. Create ID3D12Device
-//    // ==================================================
-//    UINT factoryFlags = 0;
-//
-//#ifdef _DEBUG
-//    {
-//        ComPtr<ID3D12Debug> dx12Debug;
-//        if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&dx12Debug))))
-//        {
-//            dx12Debug->EnableDebugLayer();
-//
-//            // Enable additional debug layers.
-//            factoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
-//        }
-//    }
-//#endif
-//
-//    DXCall(CreateDXGIFactory2(factoryFlags, IID_PPV_ARGS(&m_pFactory)));
-//
-//    // Try and get hardware adapter compatible with d3d12, if not found, use wrap.
-//    ComPtr<IDXGIAdapter1> adapter;
-//    getHardwareAdapter(m_pFactory, adapter.GetAddressOf());
-//    if (!adapter) DXCall(m_pFactory->EnumWarpAdapter(IID_PPV_ARGS(&adapter)));
-//
-//    DXCall(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_pDevice)));
-//
-//    // Describe and create the command queue.
-//    D3D12_COMMAND_QUEUE_DESC queueDesc = {};
-//    queueDesc.Flags                    = D3D12_COMMAND_QUEUE_FLAG_NONE;
-//    queueDesc.Type                     = D3D12_COMMAND_LIST_TYPE_DIRECT;
-//    DXCall(m_pDevice->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&m_pCommandQueue)));
-//
-//    // Describe and create the swap chain.
-//    {
-//        DXGI_SWAP_CHAIN_DESC1 sd = {};
-//        sd.BufferCount           = FRAME_COUNT;
-//        sd.Width                 = width();
-//        sd.Height                = height();
-//        sd.Format                = DXGI_FORMAT_R8G8B8A8_UNORM;
-//        // sd.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
-//        sd.Flags              = 0;
-//        sd.BufferUsage        = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-//        sd.SampleDesc.Count   = 1;
-//        sd.SampleDesc.Quality = 0;
-//        sd.SwapEffect         = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-//        sd.AlphaMode          = DXGI_ALPHA_MODE_UNSPECIFIED;
-//        sd.Scaling            = DXGI_SCALING_NONE;
-//        sd.Stereo             = FALSE;
-//
-//        DXGI_SWAP_CHAIN_FULLSCREEN_DESC fsSd = {};
-//        fsSd.Windowed                        = TRUE;
-//
-//        ComPtr<IDXGISwapChain1> swapChain1;
-//        DXCall(m_pFactory->CreateSwapChainForHwnd(m_pCommandQueue, m_hWnd, &sd, &fsSd,
-//                                                  Q_NULLPTR, swapChain1.GetAddressOf()));
-//        DXCall(swapChain1->QueryInterface(IID_PPV_ARGS(&m_pSwapChain)));
-//        m_iCurrFrameIndex = m_pSwapChain->GetCurrentBackBufferIndex();
-//    }
-//
-//    // Create render target view(RTV) descriptor heaps and handles.
-//    D3D12_DESCRIPTOR_HEAP_DESC rtvDesc = {};
-//    rtvDesc.NumDescriptors             = FRAME_COUNT;
-//    rtvDesc.Type                       = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-//    rtvDesc.Flags                      = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-//    DXCall(m_pDevice->CreateDescriptorHeap(&rtvDesc, IID_PPV_ARGS(&m_pRTVDescHeap)));
-//    m_iRTVDescSize =
-//        m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-//
-//    CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(
-//        m_pRTVDescHeap->GetCPUDescriptorHandleForHeapStart());
-//    for (UINT i = 0; i < FRAME_COUNT; i++)
-//    {
-//        m_RTVDescriptors[i] = rtvHandle;
-//        DXCall(m_pSwapChain->GetBuffer(i, IID_PPV_ARGS(&m_pRTVResources[i])));
-//        m_pDevice->CreateRenderTargetView(m_pRTVResources[i], Q_NULLPTR, m_RTVDescriptors[i]);
-//        rtvHandle.Offset(1, m_iRTVDescSize);
-//    }
-//
-//    // Create shader resource view(SRV) descriptor heap.
-//    D3D12_DESCRIPTOR_HEAP_DESC srvDesc = {};
-//    srvDesc.NumDescriptors             = 1;
-//    srvDesc.Type                       = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-//    srvDesc.Flags                      = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-//    DXCall(m_pDevice->CreateDescriptorHeap(&srvDesc, IID_PPV_ARGS(&m_pSrvDescHeap)));
-//
-//    // Create command allocator for each frame.
-//    for (UINT i = 0; i < FRAME_COUNT; i++)
-//    {
-//        DXCall(m_pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
-//                                                 IID_PPV_ARGS(&m_pCommandAllocators[i])));
-//    }
-//
-//    // Create command list. We don't create PSO here, so we set it to Q_NULLPTR to use the
-//    // default PSO. Command list by default set on recording state when created, therefore we
-//    // close it for now.
-//    DXCall(m_pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
-//                                        m_pCommandAllocators[m_iCurrFrameIndex], Q_NULLPTR,
-//                                        IID_PPV_ARGS(&m_pCommandList)));
-//    DXCall(m_pCommandList->Close());
-//
-//    // 2. Create the Fence and Descriptor Sizes
-//    // ==================================================
-//    // Create synchronized objects.
-//    DXCall(m_pDevice->CreateFence(m_iFenceValues[m_iCurrFrameIndex], D3D12_FENCE_FLAG_NONE,
-//                                  IID_PPV_ARGS(&m_pFence)));
-//    m_iFenceValues[m_iCurrFrameIndex]++;
-//
-//    m_hFenceEvent = CreateEvent(Q_NULLPTR, FALSE, FALSE, Q_NULLPTR);
-//    if (!m_hFenceEvent) DXCall(HRESULT_FROM_WIN32(GetLastError()));
-//
-//    // DXCall(m_pSwapChain->SetMaximumFrameLatency(FRAME_COUNT));
-//    // m_hSwapChainEvent = m_pSwapChain->GetFrameLatencyWaitableObject();
-//
-//    // Wait for the GPU to complete our setup before proceeding.
-//    waitForGpu();
-//}
-#pragma endregion
-
-void QDirect3D12Widget::beginScene()
+void QDirect3D12Widget::CreateBuffer()
 {
-    DXCall(m_pCommandAllocators[m_iCurrFrameIndex]->Reset());
-    DXCall(m_pCommandList->Reset(m_pCommandAllocators[m_iCurrFrameIndex], Q_NULLPTR));
+    //【2】创建堆参数
+    //默认堆,上传堆
+    D3D12_HEAP_PROPERTIES defaultHeap;
+    memset(&defaultHeap, 0, sizeof(defaultHeap));
+    defaultHeap.Type = D3D12_HEAP_TYPE_DEFAULT;
 
-    m_pCommandList->ResourceBarrier(
-        1, &CD3DX12_RESOURCE_BARRIER::Transition(m_pRTVResources[m_iCurrFrameIndex],
-                                                 D3D12_RESOURCE_STATE_PRESENT,
-                                                 D3D12_RESOURCE_STATE_RENDER_TARGET));
+    D3D12_HEAP_PROPERTIES  uploadheap;
+    memset(&uploadheap, 0, sizeof(uploadheap));
+    uploadheap.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+    //【3】创建顶点缓冲的资源描述
+    //创建VertexBuffer的资源描述
+    D3D12_RESOURCE_DESC DefaultVertexBufferDesc;
+    memset(&DefaultVertexBufferDesc, 0, sizeof(D3D12_RESOURCE_DESC));
+    DefaultVertexBufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    DefaultVertexBufferDesc.Alignment = 0;
+    DefaultVertexBufferDesc.Width = vbByteSize;
+    DefaultVertexBufferDesc.Height = 1;
+    DefaultVertexBufferDesc.DepthOrArraySize = 1;
+    DefaultVertexBufferDesc.MipLevels = 1;
+    DefaultVertexBufferDesc.Format = DXGI_FORMAT_UNKNOWN;
+    DefaultVertexBufferDesc.SampleDesc.Count = 1;
+    DefaultVertexBufferDesc.SampleDesc.Quality = 0;
+    DefaultVertexBufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    DefaultVertexBufferDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+    //【4】创建VertexBuffer和VertexBufferUpload
+    //为VertexBuffer和VertexBufferUploader创建资源
+    // Create the actual default buffer resource.
+    ThrowIfFailed(md3dDevice->CreateCommittedResource(
+        &defaultHeap,
+        D3D12_HEAP_FLAG_NONE,
+        &DefaultVertexBufferDesc,
+        D3D12_RESOURCE_STATE_COPY_DEST,
+        nullptr,
+        IID_PPV_ARGS(VertexBufferGPU.GetAddressOf())));
+
+    ThrowIfFailed(md3dDevice->CreateCommittedResource(
+        &uploadheap,
+        D3D12_HEAP_FLAG_NONE,
+        &DefaultVertexBufferDesc,
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        nullptr,
+        IID_PPV_ARGS(VertexBufferUploader.GetAddressOf())));
+
+    //【5】获取 VertexBuffer footprint
+    //获取 VertexBuffer footprint
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
+    UINT64  vertex_total_bytes = 0;
+    md3dDevice->GetCopyableFootprints(&DefaultVertexBufferDesc, 0, 1, 0, &footprint, nullptr, nullptr, &vertex_total_bytes);
+    VertexBufferUploader->Unmap(0, nullptr);
+
+    //【6】映射内存地址,并把数据拷贝到VertexBufferUploader里
+    void* ptr_vertex = nullptr;
+    VertexBufferUploader->Map(0, nullptr, &ptr_vertex);
+    memcpy(reinterpret_cast<char*>(ptr_vertex) + footprint.Offset, vertices.data(), vbByteSize);
+
+    //【7】拷贝，把VertexBufferUploader里的数据拷贝到VertexBufferGPU里
+    mCommandList->CopyBufferRegion(VertexBufferGPU.Get(), 0, VertexBufferUploader.Get(), 0, vertex_total_bytes);
+
+    //【8】为VertexBufferGPU插入资源屏障，因为一开始是以D3D12_RESOURCE_STATE_COPY_DEST的状态创建的资源，所以拷贝完以后需要给它设置好资源屏障。
+    D3D12_RESOURCE_BARRIER barrier_vertex;
+    memset(&barrier_vertex, 0, sizeof(barrier_vertex));
+    barrier_vertex.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier_vertex.Transition.pResource = VertexBufferGPU.Get();
+    barrier_vertex.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrier_vertex.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    barrier_vertex.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
+    mCommandList->ResourceBarrier(1, &barrier_vertex);
+
+    //【9】创建IndexBuffer
+    // 到这里我们就完成了对VertexBuffer的处理，下面类似，需要对IndexBuffer进行处理，两者过程及其类似，我就不一步一步赘述了。
+    //创建IndexBuffer的资源描述
+    D3D12_RESOURCE_DESC DefaultIndexBufferDesc;
+    memset(&DefaultIndexBufferDesc, 0, sizeof(D3D12_RESOURCE_DESC));
+    DefaultIndexBufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    DefaultIndexBufferDesc.Alignment = 0;
+    DefaultIndexBufferDesc.Width = ibByteSize;
+    DefaultIndexBufferDesc.Height = 1;
+    DefaultIndexBufferDesc.DepthOrArraySize = 1;
+    DefaultIndexBufferDesc.MipLevels = 1;
+    DefaultIndexBufferDesc.Format = DXGI_FORMAT_UNKNOWN;
+    DefaultIndexBufferDesc.SampleDesc.Count = 1;
+    DefaultIndexBufferDesc.SampleDesc.Quality = 0;
+    DefaultIndexBufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    DefaultIndexBufferDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+    //为IndexBuffer和IndexBufferUploader创建资源
+    ThrowIfFailed(md3dDevice->CreateCommittedResource(
+        &defaultHeap,
+        D3D12_HEAP_FLAG_NONE,
+        &DefaultIndexBufferDesc,
+        D3D12_RESOURCE_STATE_COPY_DEST,
+        nullptr,
+        IID_PPV_ARGS(IndexBufferGPU.GetAddressOf())));
+
+    ThrowIfFailed(md3dDevice->CreateCommittedResource(
+        &uploadheap,
+        D3D12_HEAP_FLAG_NONE,
+        &DefaultIndexBufferDesc,
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        nullptr,
+        IID_PPV_ARGS(IndexBufferUploader.GetAddressOf())));
+
+
+    //获取 IndexBuffer footprint
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT indexBufferFootprint;
+    UINT64  index_total_bytes = 0;
+    md3dDevice->GetCopyableFootprints(&DefaultIndexBufferDesc, 0, 1, 0, &indexBufferFootprint, nullptr, nullptr, &index_total_bytes);
+
+
+    //映射内存地址,并把数据拷贝到IndexBufferUploader里
+    void* ptr_index = nullptr;
+    IndexBufferUploader->Map(0, nullptr, &ptr_index);
+    memcpy(reinterpret_cast<char*>(ptr_index) + indexBufferFootprint.Offset, indices.data(), ibByteSize);
+    IndexBufferUploader->Unmap(0, nullptr);
+
+    //拷贝，把IndexBufferUploader里的数据拷贝到IndexBufferGPU里
+    mCommandList->CopyBufferRegion(IndexBufferGPU.Get(), 0, IndexBufferUploader.Get(), 0, index_total_bytes);
+
+    //为IndexBufferGPU插入资源屏障
+    D3D12_RESOURCE_BARRIER barrier_index;
+    memset(&barrier_index, 0, sizeof(barrier_index));
+    barrier_index.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier_index.Transition.pResource = IndexBufferGPU.Get();
+    barrier_index.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrier_index.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    barrier_index.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
+    mCommandList->ResourceBarrier(1, &barrier_index);
+
+    //【10】最后我们用VertexBufferGPU和IndexBufferGPU创建VerteBufferView和IndexBufferView来渲染。
+
+    //VertexBufferView
+    vbv.BufferLocation = VertexBufferGPU->GetGPUVirtualAddress();
+    vbv.StrideInBytes = sizeof(Vertex);
+    vbv.SizeInBytes = vbByteSize;
+
+    //IndexBufferView
+    ibv.BufferLocation = IndexBufferGPU->GetGPUVirtualAddress();
+    ibv.Format = DXGI_FORMAT_R32_UINT;
+    ibv.SizeInBytes = ibByteSize;
+
+    //设置顶点缓冲区
+    mCommandList->IASetVertexBuffers(0, 1, &vbv);
+    mCommandList->IASetIndexBuffer(&ibv);
+
+    Shader shader(md3dDevice);
+    mpShader = &shader;
+
+    //ThrowIfFailed(D3DCreateBlob(vbByteSize, &VertexBufferGPU));	//创建顶点数据内存空间
+    //ThrowIfFailed(D3DCreateBlob(ibByteSize, &IndexBufferGPU));	//创建索引数据内存空间
+    //CopyMemory(vertexBufferCpu->GetBufferPointer(), vertices.data(), vbByteSize);	//将顶点数据拷贝至顶点系统内存中
+    //CopyMemory(indexBufferCpu->GetBufferPointer(), indices.data(), ibByteSize);	//将索引数据拷贝至索引系统内存中
+    //VertexBufferGPU = CreateDefaultBuffer(md3dDevice.Get(), mCommandList.Get(), vbByteSize, vertices.data(), vertexBufferUploader);
+    //IndexBufferGPU = CreateDefaultBuffer(d3dDevice.Get(), cmdList.Get(), ibByteSize, indices.data(), indexBufferUploader);
+
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+    ZeroMemory(&psoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+    psoDesc.InputLayout = { shader.inputLayoutDesc.data(), (UINT)shader.inputLayoutDesc.size() };
+    psoDesc.pRootSignature = shader.rootSignature.Get();
+    psoDesc.VS = { reinterpret_cast<BYTE*>(shader.vsBytecode->GetBufferPointer()), shader.vsBytecode->GetBufferSize() };
+    psoDesc.PS = { reinterpret_cast<BYTE*>(shader.psBytecode->GetBufferPointer()), shader.psBytecode->GetBufferSize() };
+    psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+    psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+    psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+    psoDesc.SampleMask = UINT_MAX;	//0xffffffff,全部采样，没有遮罩
+    psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    psoDesc.NumRenderTargets = 1;
+    psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;	//归一化的无符号整型
+    psoDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    psoDesc.SampleDesc.Count = 1;	//不使用4XMSAA
+    psoDesc.SampleDesc.Quality = 0;	////不使用4XMSAA
+
+    ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&PSO)));
+
+    ThrowIfFailed(md3dDevice->CreateRootSignature(0,
+        shader.serializedRootSig->GetBufferPointer(),
+        shader.serializedRootSig->GetBufferSize(),
+        IID_PPV_ARGS(&(shader.rootSignature))));
+
+    //D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc;
+    //cbvHeapDesc.NumDescriptors = 1;
+    //cbvHeapDesc.Type =
+    //    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    //cbvHeapDesc.Flags =
+    //    D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    //cbvHeapDesc.NodeMask = 0;
+    //ThrowIfFailed(md3dDevice -> CreateDescriptorHeap(&cbvHeapDesc,
+    //        IID_PPV_ARGS(&mCbvHeap)));
 }
 
-void QDirect3D12Widget::endScene()
+/// <summary>
+/// 
+/// </summary>
+/// <param name="byteSize"></param>
+/// <param name="initData"></param>
+/// <param name="uploadBuffer"></param>
+ComPtr<ID3D12Resource> QDirect3D12Widget::CreateDefaultBuffer
+    (UINT64 byteSize, const void* initData, ComPtr<ID3D12Resource>& uploadBuffer)
 {
-    m_pCommandList->ResourceBarrier(
-        1, &CD3DX12_RESOURCE_BARRIER::Transition(m_pRTVResources[m_iCurrFrameIndex],
-                                                 D3D12_RESOURCE_STATE_RENDER_TARGET,
-                                                 D3D12_RESOURCE_STATE_PRESENT));
+    //创建上传堆，作用是：写入CPU内存数据，并传输给默认堆
+    ThrowIfFailed(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), //创建上传堆类型的堆
+        D3D12_HEAP_FLAG_NONE,
+        &CD3DX12_RESOURCE_DESC::Buffer(byteSize),//变体的构造函数，传入byteSize，其他均为默认值，简化书写
+        D3D12_RESOURCE_STATE_GENERIC_READ,	//上传堆里的资源需要复制给默认堆，所以是可读状态
+        nullptr,	//不是深度模板资源，不用指定优化值
+        IID_PPV_ARGS(&uploadBuffer)));
 
-    DXCall(m_pCommandList->Close());
-    m_pCommandQueue->ExecuteCommandLists(
-        1, reinterpret_cast<ID3D12CommandList * const *>(&m_pCommandList));
+    //创建默认堆，作为上传堆的数据传输对象
+    ComPtr<ID3D12Resource> defaultBuffer;
+    ThrowIfFailed(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),//创建默认堆类型的堆
+        D3D12_HEAP_FLAG_NONE,
+        &CD3DX12_RESOURCE_DESC::Buffer(byteSize),
+        D3D12_RESOURCE_STATE_COMMON,//默认堆为最终存储数据的地方，所以暂时初始化为普通状态
+        nullptr,
+        IID_PPV_ARGS(&defaultBuffer)));
 
-    DXCall(m_pSwapChain->Present(1, 0));
+    //将资源从COMMON状态转换到COPY_DEST状态（默认堆此时作为接收数据的目标）
+    mCommandList->ResourceBarrier(1,
+        &CD3DX12_RESOURCE_BARRIER::Transition(defaultBuffer.Get(),
+            D3D12_RESOURCE_STATE_COMMON,
+            D3D12_RESOURCE_STATE_COPY_DEST));
 
-    moveToNextFrame();
+    //将数据从CPU内存拷贝到GPU缓存
+    D3D12_SUBRESOURCE_DATA subResourceData;
+    subResourceData.pData = initData;
+    subResourceData.RowPitch = byteSize;
+    subResourceData.SlicePitch = subResourceData.RowPitch;
+    //核心函数UpdateSubresources，将数据从CPU内存拷贝至上传堆，再从上传堆拷贝至默认堆。1是最大的子资源的下标（模板中定义，意为有2个子资源）
+    UpdateSubresources<1>(mCommandList.Get(), defaultBuffer.Get(), uploadBuffer.Get(), 0, 0, 1, &subResourceData);
+
+    //再次将资源从COPY_DEST状态转换到GENERIC_READ状态(现在只提供给着色器访问)
+    mCommandList->ResourceBarrier(1,
+        &CD3DX12_RESOURCE_BARRIER::Transition(defaultBuffer.Get(),
+            D3D12_RESOURCE_STATE_COPY_DEST,
+            D3D12_RESOURCE_STATE_GENERIC_READ));
+
+    return defaultBuffer;
 }
-
+/// <summary>
+/// 
+/// </summary>
 void QDirect3D12Widget::tick()
 {
     // TODO: Update your scene here. For aesthetics reasons, only do it here if it's an
@@ -605,157 +766,14 @@ void QDirect3D12Widget::tick()
     emit ticked();
 }
 
-void QDirect3D12Widget::render()
-{
-    // Start recording the render commands
-    m_pCommandList->ClearRenderTargetView(m_RTVDescriptors[m_iCurrFrameIndex],
-                                          reinterpret_cast<const float *>(&m_BackColor), 0,
-                                          Q_NULLPTR);
-    m_pCommandList->OMSetRenderTargets(1, &m_RTVDescriptors[m_iCurrFrameIndex], FALSE,
-                                       Q_NULLPTR);
-    m_pCommandList->SetDescriptorHeaps(1, &m_pSrvDescHeap);
-
-    // TODO: Present your scene here. For aesthetics reasons, only do it here if it's an
-    // important component, otherwise do it in the MainWindow.
-    // m_pCamera->Apply();
-
-    emit rendered(m_pCommandList);
-}
-
 void QDirect3D12Widget::onReset()
 {
     // TODO(Gilad): FIXME: this needs to be done in a synchronized manner. Need to look at
     // DirectX-12 samples here: https://github.com/microsoft/DirectX-Graphics-Samples how to
     // properly do this without leaking memory.
     pauseFrames();
-    resizeSwapChain(width(), height());
+    //resizeSwapChain(width(), height());
     continueFrames();
-}
-
-void QDirect3D12Widget::cleanupRenderTarget()
-{
-    waitForGpu();
-
-    for (UINT i = 0; i < FRAME_COUNT; i++)
-    {
-        ReleaseObject(m_pRTVResources[i]);
-        m_iFenceValues[i] = m_iFenceValues[m_iCurrFrameIndex];
-    }
-}
-
-void QDirect3D12Widget::createRenderTarget()
-{
-    for (UINT i = 0; i < FRAME_COUNT; i++)
-    {
-        DXCall(m_pSwapChain->GetBuffer(i, IID_PPV_ARGS(&m_pRTVResources[i])));
-        m_pDevice->CreateRenderTargetView(m_pRTVResources[i], Q_NULLPTR, m_RTVDescriptors[i]);
-    }
-}
-
-void QDirect3D12Widget::waitForGpu()
-{
-    DXCall(m_pCommandQueue->Signal(m_pFence, m_iFenceValues[m_iCurrFrameIndex]));
-
-    DXCall(m_pFence->SetEventOnCompletion(m_iFenceValues[m_iCurrFrameIndex], m_hFenceEvent));
-    WaitForSingleObject(m_hFenceEvent, INFINITE);
-
-    m_iFenceValues[m_iCurrFrameIndex]++;
-}
-
-void QDirect3D12Widget::moveToNextFrame()
-{
-    const UINT64 currentFenceValue = m_iFenceValues[m_iCurrFrameIndex];
-    DXCall(m_pCommandQueue->Signal(m_pFence, currentFenceValue));
-
-    m_iCurrFrameIndex = m_pSwapChain->GetCurrentBackBufferIndex();
-    if (m_pFence->GetCompletedValue() < m_iFenceValues[m_iCurrFrameIndex])
-    {
-        DXCall(
-            m_pFence->SetEventOnCompletion(m_iFenceValues[m_iCurrFrameIndex], m_hFenceEvent));
-        WaitForSingleObject(m_hFenceEvent, INFINITE);
-    }
-
-    m_iFenceValues[m_iCurrFrameIndex] = currentFenceValue + 1;
-}
-
-void QDirect3D12Widget::resizeSwapChain(int width, int height)
-{
-    // ReleaseHandle(m_hSwapChainEvent);
-    cleanupRenderTarget();
-
-    if (m_pSwapChain)
-    {
-        DXCall(m_pSwapChain->ResizeBuffers(FRAME_COUNT, width, height,
-                                           DXGI_FORMAT_R8G8B8A8_UNORM, 0));
-    }
-    else
-    {
-        DXGI_SWAP_CHAIN_DESC1 sd = {};
-        sd.BufferCount           = FRAME_COUNT;
-        sd.Width                 = width;
-        sd.Height                = height;
-        sd.Format                = DXGI_FORMAT_R8G8B8A8_UNORM;
-        // sd.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
-        sd.Flags              = 0;
-        sd.BufferUsage        = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-        sd.SampleDesc.Count   = 1;
-        sd.SampleDesc.Quality = 0;
-        sd.SwapEffect         = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-        sd.AlphaMode          = DXGI_ALPHA_MODE_UNSPECIFIED;
-        sd.Scaling            = DXGI_SCALING_NONE;
-        sd.Stereo             = FALSE;
-
-        DXGI_SWAP_CHAIN_FULLSCREEN_DESC fsSd = {};
-        fsSd.Windowed                        = TRUE;
-
-        ComPtr<IDXGISwapChain1> m_SwapChain;
-        DXCall(m_pFactory->CreateSwapChainForHwnd(m_pCommandQueue, m_hWnd, &sd, &fsSd,
-                                                  Q_NULLPTR, m_SwapChain.GetAddressOf()));
-        DXCall(m_SwapChain->QueryInterface(IID_PPV_ARGS(&m_pSwapChain)));
-
-        // DXCall(m_pSwapChain->SetMaximumFrameLatency(FRAME_COUNT));
-        // m_hSwapChainEvent = m_pSwapChain->GetFrameLatencyWaitableObject();
-    }
-
-    createRenderTarget();
-
-    m_iCurrFrameIndex = m_pSwapChain->GetCurrentBackBufferIndex();
-}
-
-void QDirect3D12Widget::getHardwareAdapter(IDXGIFactory2 *  pFactory,
-                                           IDXGIAdapter1 ** ppAdapter)
-{
-    ComPtr<IDXGIAdapter1> adapter;
-    *ppAdapter = Q_NULLPTR;
-
-    for (UINT adapterIndex = 0;
-         DXGI_ERROR_NOT_FOUND != pFactory->EnumAdapters1(adapterIndex, &adapter);
-         ++adapterIndex)
-    {
-        DXGI_ADAPTER_DESC1 desc;
-        adapter->GetDesc1(&desc);
-
-        // Skip software adapter.
-        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
-
-        // Check to see if the adapter supports Direct3D 12, but don't create the actual device
-        // yet.
-        if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0,
-                                        _uuidof(ID3D12Device), Q_NULLPTR)))
-            break;
-    }
-
-    *ppAdapter = adapter.Detach();
-}
-
-void QDirect3D12Widget::resetEnvironment()
-{
-    // TODO: Add your own custom default environment, i.e:
-    // m_pCamera->resetCamera();
-
-    onReset();
-
-    if (!m_bRenderActive) tick();
 }
 
 void QDirect3D12Widget::wheelEvent(QWheelEvent * event)

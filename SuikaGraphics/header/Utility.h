@@ -5,10 +5,29 @@
 #pragma comment(lib, "dxgi.lib")
 
 #include <stdexcept>
+#include <Windows.h>
 #include <wrl.h>
-#include <d3d12.h>
 #include <dxgi1_4.h>
-#include <D3Dcompiler.h>
+#include <d3d12.h>
+#include <d3dcompiler.h>
+#include <DirectXMath.h>
+#include <DirectXPackedVector.h>
+#include <DirectXColors.h>
+#include <DirectXCollision.h>
+#include <string>
+#include <memory>
+#include <algorithm>
+#include <vector>
+#include <array>
+#include <unordered_map>
+#include <cstdint>
+#include <fstream>
+#include <sstream>
+#include <windowsx.h>
+#include <comdef.h>
+#include "d3dx12.h"
+
+using Microsoft::WRL::ComPtr;
 
 // ############################################################################
 // ############################## Utils #######################################

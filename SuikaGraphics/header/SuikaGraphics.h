@@ -5,7 +5,6 @@
 #include <QProgressBar>
 #include <qlabel.h>
 
-#include "GameTimer.h"
 #include "ui_SuikaGraphics.h"
 #include "..\source\QDirect3D12Widget\QDirect3D12Widget.h"
 
@@ -24,7 +23,6 @@ public:
 private:
     void closeEvent(QCloseEvent* event) override;
 
-    GameTimer timer;
     // UI Components
     QProgressBar* progressBar1;
     QLabel* fpsShower;
