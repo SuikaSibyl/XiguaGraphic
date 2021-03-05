@@ -32,38 +32,29 @@ public:
     QDirect3D12Widget(QWidget * parent);
     ~QDirect3D12Widget();
 
-    void release();
-    void run();
-    void pauseFrames();
-    void continueFrames();
+    // ================================================================
+    // --------------------- LifeCycle Interface ----------------------
+    // ================================================================
+    void    Run();
+    void    PauseFrames();
+    void    ContinueFrames();
+    void    Release();
 
-public:
-    int m_Fps;
-    int m_TotalTime;
+    // ================================================================
+    // ------------------------ Data Retrieve -------------------------
+    // ================================================================
+    int     GetFPS() { return m_Fps; }
+    int     GetTotalTime() { return m_TotalTime; }
+
+protected:
+    // ================================================================
+    // ------------------------- Life Cycle ---------------------------
+    // ================================================================
+    bool    Initialize();
+    void    Update();
+    void    Draw();
 
 private:
-    // Lifespan
-    bool init();
-
-    void tick();
-    bool InitDirect3D();
-#pragma region InitializeSubFunctions
-    void CreateDevice();
-    void CreateFence();
-    void GetDescriptorSize();
-    void SetMSAA();
-    void CreateCommandObjects();
-    void CreateSwapChain();
-    void CreateDescriptorHeap();
-    void CreateRTV();
-    void CreateDSV();
-    void CreateViewPortAndScissorRect();
-#pragma endregion
-
-    void FlushCmdQueue();
-    void CalculateFrameState();
-    void Draw();
-    void CreateBuffer();
     ComPtr<ID3D12Resource> CreateDefaultBuffer
         (UINT64 byteSize, const void* initData, ComPtr<ID3D12Resource>& uploadBuffer);
 
@@ -76,7 +67,6 @@ private:
 protected:
     int mCurrentFence = 0;	//初始CPU上的围栏点为0
 
-    GameTimer timer;
 
     /// <summary>
     /// 声明指针接口和变量
@@ -90,8 +80,6 @@ protected:
     UINT rtvDescriptorSize;
     UINT dsvDescriptorSize;
     UINT cbv_srv_uavDescriptorSize;
-
-    void DrawBox(const GameTimer& gt);
 
     void BuildDescriptorHeaps();
     void BuildConstantBuffers();
@@ -119,43 +107,8 @@ protected:
     ComPtr<IDXGISwapChain>          m_SwapChain;
     ComPtr<ID3D12DescriptorHeap>    rtvHeap;
     ComPtr<ID3D12DescriptorHeap>    dsvHeap;
-    // ====================================================
-
-
-    // Qt Events
-private:
-    bool           event(QEvent * event) override;
-    void           showEvent(QShowEvent * event) override;
-    QPaintEngine * paintEngine() const override;
-    void           paintEvent(QPaintEvent * event) override;
-    void           resizeEvent(QResizeEvent * event) override;
-    void           wheelEvent(QWheelEvent * event) override;
 
     LRESULT WINAPI WndProc(MSG * pMsg);
-
-#if QT_VERSION >= 0x050000
-    bool nativeEvent(const QByteArray & eventType, void * message, long * result) override;
-#else
-    bool winEvent(MSG * message, long * result) override;
-#endif
-
-signals:
-    void deviceInitialized(bool success);
-
-    void eventHandled();
-    void widgetResized();
-
-    void ticked();
-    void rendered(ID3D12GraphicsCommandList * cl);
-
-    void keyPressed(QKeyEvent *);
-    void mouseMoved(QMouseEvent *);
-    void mouseClicked(QMouseEvent *);
-    void mouseReleased(QMouseEvent *);
-
-private slots:
-    void onFrame();
-    void onReset();
 
     // Getters / Setters
 public:
@@ -164,26 +117,13 @@ public:
     bool renderActive() const { return m_bRenderActive; }
     void setRenderActive(bool active) { m_bRenderActive = active; }
 
-    D3DCOLORVALUE * BackColor() { return &m_BackColor; }
-
 protected:
 
     D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS msaaQualityLevels;
 
-    // Widget objects.
-    QTimer m_qTimer;
 
     HWND m_hWnd;
-    bool m_bDeviceInitialized;
     bool m_bRenderActive;
-    bool m_bStarted;
-
-    D3DCOLORVALUE m_BackColor;
-
-    /// <summary>
-    /// 
-    /// </summary>
-    void Update();
     void OnMouseMove(QMouseEvent*);
 
     bool m4xMsaaState = false; // 4X MSAA enabled
@@ -209,5 +149,83 @@ protected:
     float mPhi = DirectX::XM_PIDIV4;
     float mRadius = 5.0f;
 
+private:
 
+    // ================================================================
+    // ----------------- Private Helper Function ----------------------
+    // ================================================================
+    void FlushCmdQueue();
+    void CalculateFrameState();
+
+    // ================================================================
+    // ------------------- Private Helper Object ----------------------
+    // ================================================================
+    QTimer m_qTimer;        // Regularly call update
+    GameTimer m_tGameTimer; // Manage time in system
+
+    // ================================================================
+    // ------------------ Private Helper Variable ---------------------
+    // ================================================================
+    bool m_bDeviceInitialized;
+    bool m_bStarted;
+
+    int m_Fps;
+    int m_TotalTime;
+
+    // ================================================================
+    // --------------------- D3D Initilization ------------------------
+    // ================================================================
+    bool InitDirect3D();
+#pragma region InitializeSubFunctions
+    void CreateDevice();
+    void CreateFence();
+    void GetDescriptorSize();
+    void SetMSAA();
+    void CreateCommandObjects();
+    void CreateSwapChain();
+    void CreateDescriptorHeap();
+    void CreateRTV();
+    void CreateDSV();
+    void CreateViewPortAndScissorRect();
+#pragma endregion
+
+    // ================================================================
+    // -------------------------- Qt Events ---------------------------
+    // ================================================================
+    bool            event(QEvent* event) override;
+    void            showEvent(QShowEvent* event) override;
+    QPaintEngine*   paintEngine() const override;
+    void            paintEvent(QPaintEvent* event) override;
+    void            resizeEvent(QResizeEvent* event) override;
+    void            wheelEvent(QWheelEvent* event) override;
+
+#if QT_VERSION >= 0x050000
+    bool            nativeEvent(const QByteArray& eventType, void* message, long* result) override;
+#else
+    bool            winEvent(MSG* message, long* result) override;
+#endif
+
+    // ================================================================
+    // -------------------------- Qt Slots ----------------------------
+    // ================================================================
+private slots:
+    void onFrame();
+    void onResize();
+
+    // ================================================================
+    // ------------------------- Qt Signals ---------------------------
+    // ================================================================
+signals:
+    void deviceInitialized(bool success);
+
+    void eventHandled();
+    void widgetResized();
+
+    void ticked();
+    void rendered(ID3D12GraphicsCommandList* cl);
+
+    void keyPressed(QKeyEvent*);
+    void mouseMoved(QMouseEvent*);
+    void mouseClicked(QMouseEvent*);
+    void mouseReleased(QMouseEvent*);
 };

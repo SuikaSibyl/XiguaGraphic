@@ -34,6 +34,18 @@
     <Filter Include="Shader Files">
       <UniqueIdentifier>{99da4717-d970-45d4-b103-11a51cc1083b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\Utility">
+      <UniqueIdentifier>{bd5dec67-205c-4316-a507-4250fc228c3d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Pipeline">
+      <UniqueIdentifier>{6fe23bc5-c020-4b77-8e11-c5177074b9c1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Basement">
+      <UniqueIdentifier>{bba9420e-0699-45fe-9fca-66d091df7dcc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Interaction">
+      <UniqueIdentifier>{a03b375f-73de-4b85-83f6-172d24632bf7}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="SuikaGraphics.qrc">
@@ -68,25 +80,28 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="header\GameTimer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="header\Utility.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="header\Shader.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="header\d3dx12.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Utility</Filter>
     </ClInclude>
     <ClInclude Include="header\MathHelper.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="header\UploadBuffer.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Utility</Filter>
     </ClInclude>
     <ClInclude Include="header\MeshGeometry.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Pipeline</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Shader.h">
+      <Filter>Header Files\Pipeline</Filter>
+    </ClInclude>
+    <ClInclude Include="header\UploadBuffer.h">
+      <Filter>Header Files\Pipeline</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Utility.h">
+      <Filter>Header Files\Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="header\d3dx12.h">
+      <Filter>Header Files\Basement</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Interaction.h">
+      <Filter>Header Files\Interaction</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -94,7 +109,12 @@
       <Filter>Source Files\QDirect3D12Widget</Filter>
     </QtMoc>
     <QtMoc Include="header\SuikaGraphics.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Basement</Filter>
     </QtMoc>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="shader\Color.hlsl">
+      <Filter>Shader Files</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>

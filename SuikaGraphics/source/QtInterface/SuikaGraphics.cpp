@@ -70,9 +70,9 @@ void SuikaGraphics::addToolbarWidgets()
     m_pCbxDoFrames->setChecked(true);
     connect(m_pCbxDoFrames, &QCheckBox::stateChanged, [&] {
         if (m_pCbxDoFrames->isChecked())
-            m_pScene->continueFrames();
+            m_pScene->ContinueFrames();
         else
-            m_pScene->pauseFrames();
+            m_pScene->PauseFrames();
         });
     ui->mainToolBar->addWidget(m_pCbxDoFrames);
 
@@ -106,7 +106,7 @@ void SuikaGraphics::init(bool success)
 
     // Start processing frames with a short delay in case things are still initializing/loading
     // in the background.
-    QTimer::singleShot(500, this, [&] { m_pScene->run(); });
+    QTimer::singleShot(500, this, [&] { m_pScene->Run(); });
     disconnect(m_pScene, &QDirect3D12Widget::deviceInitialized, this, &SuikaGraphics::init);
 }
 
@@ -118,8 +118,8 @@ void SuikaGraphics::tick()
     // TODO: Update the scene here.
     // m_pMesh->Tick();
 
-    fpsShower->setText(QString("fps: ") + QString::number(m_pScene->m_Fps));
-    timeShower->setText(QString("run time: ") + QString::number(int(m_pScene->m_TotalTime)));
+    fpsShower->setText(QString("fps: ") + QString::number(m_pScene->GetFPS()));
+    timeShower->setText(QString("run time: ") + QString::number(int(m_pScene->GetTotalTime())));
 }
 
 void SuikaGraphics::render(ID3D12GraphicsCommandList* cl)
@@ -130,7 +130,7 @@ void SuikaGraphics::render(ID3D12GraphicsCommandList* cl)
 void SuikaGraphics::closeEvent(QCloseEvent * event)
 {
     event->ignore();
-    m_pScene->release();
+    m_pScene->Release();
     QTime dieTime = QTime::currentTime().addMSecs(500);
     while (QTime::currentTime() < dieTime)
         QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
