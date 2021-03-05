@@ -370,28 +370,6 @@ void QDirect3D12Widget::Draw()
         0,	//裁剪矩形数量
         nullptr);	//裁剪矩形指针
 
-    //D3D12_VERTEX_BUFFER_VIEW vbv;
-    //vbv.BufferLocation = VertexBufferGPU->GetGPUVirtualAddress();//顶点缓冲区资源虚拟地址
-    //vbv.SizeInBytes = vbByteSize;	//顶点缓冲区大小（所有顶点数据大小）
-    //vbv.StrideInBytes = sizeof(Vertex);	//每个顶点元素所占用的字节数
-
-    //设置CBV描述符堆
-    //ID3D12DescriptorHeap* descriHeaps[] = { mCbvHeap.Get() };//注意这里之所以是数组，是因为还可能包含SRV和UAV，而这里我们只用到了CBV
-    //mCommandList->SetDescriptorHeaps(_countof(descriHeaps), descriHeaps);
-    ////设置根签名
-    //mCommandList->SetGraphicsRootSignature(mpShader->rootSignature.Get());
-    ////将图元拓扑类型传入流水线
-    //mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    ////设置根描述符表
-    //mCommandList->SetGraphicsRootDescriptorTable(0, //根参数的起始索引
-    //    mCbvHeap->GetGPUDescriptorHandleForHeapStart());
-
-    ////绘制顶点（通过索引缓冲区绘制）
-    //mCommandList->DrawIndexedInstanced(sizeof(indices), //每个实例要绘制的索引数
-    //    1,	//实例化个数
-    //    0,	//起始索引位置
-    //    0,	//子物体起始索引在全局索引中的位置
-    //    0);	//实例化的高级技术，暂时设置为0
     // Specify the buffers we are going to render to. 
     //mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
     //然后我们指定将要渲染的缓冲区，即指定RTV和DSV。
