@@ -279,6 +279,7 @@ void QDirect3D12Widget::BuildPSO()
 /// </summary>
 bool QDirect3D12Widget::Initialize()
 {
+    onResize();
     InitDirect3D();
 
     mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr);
@@ -604,6 +605,8 @@ int i = 0;
 int mLastMousePosx = 0;
 int mLastMousePosy = 0;
 
+#pragma region InputCallback
+
 void QDirect3D12Widget::OnMouseMove(QMouseEvent* event)
 {
     int x = event->pos().x();
@@ -612,14 +615,29 @@ void QDirect3D12Widget::OnMouseMove(QMouseEvent* event)
     float dx = XMConvertToRadians(0.25f * static_cast<float> (x - mLastMousePosx));
     float dy = XMConvertToRadians(0.25f * static_cast<float> (y - mLastMousePosy));
 
-    mTheta += dx; 
-    mPhi += dy;
+    mTheta -= dx;
+    mPhi -= dy;
 
     mPhi = MathHelper::Clamp(mPhi, 0.1f, MathHelper::Pi - 0.1f);
     // 
     mLastMousePosx = x;
     mLastMousePosy = y;
 }
+
+void QDirect3D12Widget::OnMousePressed(QMouseEvent* event)
+{
+    int x = event->pos().x();
+    int y = event->pos().y();
+
+    mLastMousePosx = x;
+    mLastMousePosy = y;
+}
+
+void QDirect3D12Widget::OnMouseReleased(QMouseEvent* event)
+{
+
+}
+#pragma endregion
 
 #pragma region D3DInitialize
 bool QDirect3D12Widget::InitDirect3D()
@@ -889,16 +907,22 @@ bool QDirect3D12Widget::event(QEvent* event)
         }
         break;
     case QEvent::KeyPress:
+        if (!m_bRenderActive) break;
         emit keyPressed((QKeyEvent*)event);
         break;
     case QEvent::MouseMove:
+        if (!m_bRenderActive) break;
         OnMouseMove((QMouseEvent*)event);
         emit mouseMoved((QMouseEvent*)event);
         break;
     case QEvent::MouseButtonPress:
+        if (!m_bRenderActive) break;
+        OnMousePressed((QMouseEvent*)event);
         emit mouseClicked((QMouseEvent*)event);
         break;
     case QEvent::MouseButtonRelease:
+        if (!m_bRenderActive) break;
+        OnMouseReleased((QMouseEvent*)event);
         emit mouseReleased((QMouseEvent*)event);
         break;
     }

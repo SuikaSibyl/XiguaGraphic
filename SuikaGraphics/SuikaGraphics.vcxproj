@@ -70,7 +70,7 @@
     <IncludePath>E:\Qt\5.12.10\msvc2017\include;.\header;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>E:\Qt\5.12.10\msvc2017_64\include;.\header;$(IncludePath)</IncludePath>
+    <IncludePath>.\source\QDirect3D12Widget;D:\qt5.14\qt\5.14.2\msvc2017_64\include;E:\Qt\5.12.10\msvc2017_64\include;.\header;$(IncludePath)</IncludePath>
     <LibraryPath>$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|Win32'">

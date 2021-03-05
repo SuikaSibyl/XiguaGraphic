@@ -6,7 +6,7 @@
 #include <qlabel.h>
 
 #include "ui_SuikaGraphics.h"
-#include "..\source\QDirect3D12Widget\QDirect3D12Widget.h"
+#include <QDirect3D12Widget.h>
 
 class SuikaGraphics : public QMainWindow
 {

@@ -54,6 +54,13 @@ protected:
     void    Update();
     void    Draw();
 
+    // ================================================================
+    // ----------------------- Input Callback -------------------------
+    // ================================================================
+    void OnMouseMove(QMouseEvent*);
+    void OnMousePressed(QMouseEvent*);
+    void OnMouseReleased(QMouseEvent*);
+
 private:
     ComPtr<ID3D12Resource> CreateDefaultBuffer
         (UINT64 byteSize, const void* initData, ComPtr<ID3D12Resource>& uploadBuffer);
@@ -87,6 +94,7 @@ protected:
     void BuildShadersAndInputLayout();
     void BuildBoxGeometry();
     void BuildPSO();
+
     //Default buffer
     ComPtr<ID3D12Resource> VertexBufferGPU = nullptr;
     ComPtr<ID3D12Resource> IndexBufferGPU = nullptr;
@@ -124,7 +132,6 @@ protected:
 
     HWND m_hWnd;
     bool m_bRenderActive;
-    void OnMouseMove(QMouseEvent*);
 
     bool m4xMsaaState = false; // 4X MSAA enabled
     UINT m4xMsaaQuality = 0; // quality level of 4X MSAA
