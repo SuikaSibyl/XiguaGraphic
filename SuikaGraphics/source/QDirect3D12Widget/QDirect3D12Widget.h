@@ -61,32 +61,22 @@ protected:
     void OnMousePressed(QMouseEvent*);
     void OnMouseReleased(QMouseEvent*);
 
-private:
-    ComPtr<ID3D12Resource> CreateDefaultBuffer
-        (UINT64 byteSize, const void* initData, ComPtr<ID3D12Resource>& uploadBuffer);
+    // ================================================================
+    // ----------------------- Input Callback -------------------------
+    // ================================================================
+    HWND const& nativeHandle() const { return m_hWnd; }
+    // Render Active/Inavtive Get & Set
+    bool renderActive() const { return m_bRenderActive; }
+    void setRenderActive(bool active) { m_bRenderActive = active; }
 
-    ComPtr<ID3D12PipelineState> PSO;
+private:
+    // ================================================================
+    // ------------------------ BOX APP only --------------------------
+    // ================================================================
     ComPtr<ID3D12DescriptorHeap> mCbvHeap = nullptr;
     D3D12_VERTEX_BUFFER_VIEW vbv;
     D3D12_INDEX_BUFFER_VIEW ibv;
     Shader* mpShader;
-
-protected:
-    int mCurrentFence = 0;	//初始CPU上的围栏点为0
-
-
-    /// <summary>
-    /// 声明指针接口和变量
-    /// </summary>
-    // ====================================================
-    D3D12_VIEWPORT viewPort;
-    D3D12_RECT scissorRect;
-
-    UINT mCurrentBackBuffer = 0;
-
-    UINT rtvDescriptorSize;
-    UINT dsvDescriptorSize;
-    UINT cbv_srv_uavDescriptorSize;
 
     void BuildDescriptorHeaps();
     void BuildConstantBuffers();
@@ -102,48 +92,7 @@ protected:
     ComPtr<ID3D12Resource> VertexBufferUploader = nullptr;
     ComPtr<ID3D12Resource> IndexBufferUploader = nullptr;
 
-    ComPtr<ID3D12Device>    md3dDevice;
-    ComPtr<IDXGIFactory4>   dxgiFactory;
-    ComPtr<ID3D12Fence>     fence;
-
-    ComPtr<ID3D12CommandAllocator>      mDirectCmdListAlloc;
-    ComPtr<ID3D12CommandQueue>          mCommandQueue;
-    ComPtr<ID3D12GraphicsCommandList>   mCommandList;
-
-    ComPtr<ID3D12Resource>          depthStencilBuffer;
-    ComPtr<ID3D12Resource>          swapChainBuffer[2];
-    ComPtr<IDXGISwapChain>          m_SwapChain;
-    ComPtr<ID3D12DescriptorHeap>    rtvHeap;
-    ComPtr<ID3D12DescriptorHeap>    dsvHeap;
-
-    LRESULT WINAPI WndProc(MSG * pMsg);
-
-    // Getters / Setters
-public:
-    HWND const & nativeHandle() const { return m_hWnd; }
-
-    bool renderActive() const { return m_bRenderActive; }
-    void setRenderActive(bool active) { m_bRenderActive = active; }
-
-protected:
-
-    D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS msaaQualityLevels;
-
-
-    HWND m_hWnd;
-    bool m_bRenderActive;
-
-    bool m4xMsaaState = false; // 4X MSAA enabled
-    UINT m4xMsaaQuality = 0; // quality level of 4X MSAA
-
-    DXGI_FORMAT mBackBufferFormat =
-        DXGI_FORMAT_R8G8B8A8_UNORM;
-
-    DXGI_FORMAT mDepthStencilFormat =
-        DXGI_FORMAT_D24_UNORM_S8_UINT;
     ComPtr<ID3D12PipelineState> mPSO = nullptr;
-    ComPtr<ID3DBlob> vsBytecode = nullptr;
-    ComPtr<ID3DBlob> psBytecode = nullptr;
     ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
     std::unique_ptr<UploadBuffer<ObjectConstants>> mObjectCB = nullptr;
     std::unique_ptr<MeshGeometry> mBoxGeo = nullptr;
@@ -152,11 +101,19 @@ protected:
     DirectX::XMFLOAT4X4 mView = MathHelper::Identity4x4();
     DirectX::XMFLOAT4X4 mProj = MathHelper::Identity4x4();
 
+    int mLastMousePosx = 0;
+    int mLastMousePosy = 0;
+
     float mTheta = 1.5f * DirectX::XM_PI;
     float mPhi = DirectX::XM_PIDIV4;
     float mRadius = 5.0f;
 
 private:
+    // ================================================================
+    // ------------------ Private Important Object --------------------
+    // ================================================================
+    QTimer m_qTimer;        // Regularly call update
+    GameTimer m_tGameTimer; // Manage time in system
 
     // ================================================================
     // ----------------- Private Helper Function ----------------------
@@ -164,20 +121,50 @@ private:
     void FlushCmdQueue();
     void CalculateFrameState();
 
-    // ================================================================
-    // ------------------- Private Helper Object ----------------------
-    // ================================================================
-    QTimer m_qTimer;        // Regularly call update
-    GameTimer m_tGameTimer; // Manage time in system
+    ComPtr<ID3D12Resource> CreateDefaultBuffer
+        (UINT64 byteSize, const void* initData, ComPtr<ID3D12Resource>& uploadBuffer);
 
     // ================================================================
     // ------------------ Private Helper Variable ---------------------
     // ================================================================
-    bool m_bDeviceInitialized;
-    bool m_bStarted;
+    HWND    m_hWnd;                 // Window Handler
+    bool    m_bDeviceInitialized;
+    bool    m_bStarted;
+    int     m_Fps;
+    int     m_TotalTime;
+    bool    m_bRenderActive;        // Ture == not paused
+    UINT    mCurrentBackBuffer = 0;
+    int     mCurrentFence = 0;	    //Initial CPU Fence = 0
 
-    int m_Fps;
-    int m_TotalTime;
+    // ================================================================
+    // --------------------- D3D Init Variable ------------------------
+    // ================================================================
+    ComPtr<ID3D12Device>    m_d3dDevice;
+    ComPtr<IDXGIFactory4>   m_dxgiFactory;
+    ComPtr<ID3D12Fence>     m_fence;
+    // View-Descriptor Size
+    UINT m_rtvDescriptorSize;
+    UINT m_dsvDescriptorSize;
+    UINT m_cbv_srv_uavDescriptorSize;
+    // MSAA stuff
+    bool m4xMsaaState = false;  // 4X MSAA enabled
+    UINT m4xMsaaQuality = 0;    // quality level of 4X MSAA
+    D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS msaaQualityLevels;
+    DXGI_FORMAT m_BackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+    DXGI_FORMAT m_DepthStencilFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    // Command Objects
+    ComPtr<ID3D12CommandAllocator>      m_DirectCmdListAlloc;
+    ComPtr<ID3D12CommandQueue>          m_CommandQueue;
+    ComPtr<ID3D12GraphicsCommandList>   m_CommandList;
+    // Resource & Swap Chain
+    ComPtr<ID3D12Resource>          m_DepthStencilBuffer;
+    ComPtr<ID3D12Resource>          m_SwapChainBuffer[2];
+    ComPtr<IDXGISwapChain>          m_SwapChain;
+    ComPtr<ID3D12DescriptorHeap>    m_rtvHeap;
+    ComPtr<ID3D12DescriptorHeap>    m_dsvHeap;
+    // Rect & ViewPort
+    D3D12_RECT scissorRect;
+    D3D12_VIEWPORT viewPort;
 
     // ================================================================
     // --------------------- D3D Initilization ------------------------
@@ -211,6 +198,7 @@ private:
 #else
     bool            winEvent(MSG* message, long* result) override;
 #endif
+    LRESULT WINAPI WndProc(MSG* pMsg);
 
     // ================================================================
     // -------------------------- Qt Slots ----------------------------
