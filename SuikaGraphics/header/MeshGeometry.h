@@ -15,6 +15,7 @@ struct SubmeshGeometry
 	// This is used in later chapters of the book.
 	DirectX::BoundingBox Bounds;
 };
+
 struct MeshGeometry
 {
 	// Give it a name so we can look it up by name.
@@ -22,18 +23,15 @@ struct MeshGeometry
 	// System memory copies. Use Blobs because the vertex / index format can
 	// be generic.
 	// It is up to the client to cast appropriately.
-	Microsoft::WRL::ComPtr<ID3DBlob> VertexBufferCPU =
-		nullptr;
-	Microsoft::WRL::ComPtr<ID3DBlob> IndexBufferCPU =
-		nullptr;
-	Microsoft::WRL::ComPtr<ID3D12Resource>
-		VertexBufferGPU = nullptr;
-	Microsoft::WRL::ComPtr<ID3D12Resource>
-		IndexBufferGPU = nullptr;
-	Microsoft::WRL::ComPtr<ID3D12Resource>
-		VertexBufferUploader = nullptr;
-	Microsoft::WRL::ComPtr<ID3D12Resource>
-		IndexBufferUploader = nullptr;
+	Microsoft::WRL::ComPtr<ID3DBlob> VertexBufferCPU = nullptr;
+	Microsoft::WRL::ComPtr<ID3DBlob> IndexBufferCPU = nullptr;
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> VertexBufferGPU = nullptr;
+	Microsoft::WRL::ComPtr<ID3D12Resource> IndexBufferGPU = nullptr;
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> VertexBufferUploader = nullptr;
+	Microsoft::WRL::ComPtr<ID3D12Resource> IndexBufferUploader = nullptr;
+
 	// Data about the buffers.
 	UINT VertexByteStride = 0;
 	UINT VertexBufferByteSize = 0;

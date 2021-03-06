@@ -73,7 +73,6 @@ private:
     // ================================================================
     // ------------------------ BOX APP only --------------------------
     // ================================================================
-    ComPtr<ID3D12DescriptorHeap> mCbvHeap = nullptr;
     D3D12_VERTEX_BUFFER_VIEW vbv;
     D3D12_INDEX_BUFFER_VIEW ibv;
     Shader* mpShader;
@@ -160,8 +159,10 @@ private:
     ComPtr<ID3D12Resource>          m_DepthStencilBuffer;
     ComPtr<ID3D12Resource>          m_SwapChainBuffer[2];
     ComPtr<IDXGISwapChain>          m_SwapChain;
-    ComPtr<ID3D12DescriptorHeap>    m_rtvHeap;
-    ComPtr<ID3D12DescriptorHeap>    m_dsvHeap;
+    // Descriptor Heaps
+    ComPtr<ID3D12DescriptorHeap>    m_rtvHeap = nullptr;
+    ComPtr<ID3D12DescriptorHeap>    m_dsvHeap = nullptr;
+    ComPtr<ID3D12DescriptorHeap>    m_cbvHeap = nullptr;
     // Rect & ViewPort
     D3D12_RECT scissorRect;
     D3D12_VIEWPORT viewPort;

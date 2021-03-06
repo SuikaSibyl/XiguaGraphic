@@ -23,14 +23,6 @@ public:
 			  { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 			  { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 		};
-
-		//UINT elementByteSize = Utils::CalcConstantBufferByteSize(sizeof(ObjectConstants));
-		////ComPtr<ID3D12Resource> mUploadCBuffer; 
-		////md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, 
-		////	&CD3DX12_RESOURCE_DESC::Buffer(mElementByteSize * NumElements), 
-		////	D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&mUploadCBuffer));
-
-		//BuildRootSignature(md3dDevice);
 	}
 
 	std::vector<D3D12_INPUT_ELEMENT_DESC> inputLayoutDesc;
