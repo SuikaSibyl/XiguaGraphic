@@ -103,6 +103,9 @@
     <ClInclude Include="header\Interaction.h">
       <Filter>Header Files\Interaction</Filter>
     </ClInclude>
+    <ClInclude Include="header\PipelineSetting.h">
+      <Filter>Header Files\Pipeline</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="source\QDirect3D12Widget\QDirect3D12Widget.h">

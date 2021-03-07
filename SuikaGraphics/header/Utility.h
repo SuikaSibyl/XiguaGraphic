@@ -95,5 +95,3 @@ namespace Utils
 {
     UINT CalcConstantBufferByteSize(UINT byteSize);
 }
-
-struct ObjectConstants { DirectX::XMFLOAT4X4 WorldViewProj = MathHelper::Identity4x4(); };

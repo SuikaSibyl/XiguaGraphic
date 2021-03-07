@@ -18,6 +18,8 @@ public:
 		vsBytecode = CompileShader(L"shader\\Color.hlsl", nullptr, "VS", "vs_5_0");
 		psBytecode = CompileShader(L"shader\\Color.hlsl", nullptr, "PS", "ps_5_0");
 
+		// Create an array of D3D12_INPUT_ELEMENT_DESC
+		//  + each element is a D3D12_INPUT_ELEMENT_DESC
 		inputLayoutDesc =
 		{
 			  { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
@@ -25,7 +27,16 @@ public:
 		};
 	}
 
+	// D3D12_INPUT_LAYOUT_DESC
+	//  + describe the vertex data we use
+	//	+ equals to array of D3D12_INPUT_ELEMENT_DESC
+	//	+ used to fill out pso DESC -> InputLayout
 	std::vector<D3D12_INPUT_ELEMENT_DESC> inputLayoutDesc;
+	D3D12_INPUT_LAYOUT_DESC GetInputLayout()
+	{
+		return { this->inputLayoutDesc.data(), (UINT)this->inputLayoutDesc.size() };
+	}
+
 	ComPtr<ID3D12RootSignature> rootSignature;
 
 	ComPtr<ID3DBlob> vsBytecode = nullptr;

@@ -97,7 +97,7 @@ void QDirect3D12Widget::BuildDescriptorHeaps()
 	// 创建Descriptor heap, 并创建CBV
 	// 首先创建cbv堆
 	D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc;
-	cbvHeapDesc.NumDescriptors = 1;
+	cbvHeapDesc.NumDescriptors = 2;
 	cbvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	cbvHeapDesc.NodeMask = 0;
@@ -106,21 +106,42 @@ void QDirect3D12Widget::BuildDescriptorHeaps()
 
 void QDirect3D12Widget::BuildConstantBuffers()
 {
+	// Create Object CBV
+	// ----------------------
 	mObjectCB = std::make_unique<UploadBuffer<ObjectConstants>>(m_d3dDevice.Get(), 1, true);
 	UINT objCBByteSize = Utils::CalcConstantBufferByteSize(sizeof(ObjectConstants));
-	D3D12_GPU_VIRTUAL_ADDRESS cbAddress = mObjectCB->Resource()->GetGPUVirtualAddress();
+	D3D12_GPU_VIRTUAL_ADDRESS objCbAddress = mObjectCB->Resource()->GetGPUVirtualAddress();
 	// Offset to the ith object constant buffer in the buffer.
 	// Here our i = 0.
 	int boxCBufIndex = 0;
-	cbAddress += boxCBufIndex * objCBByteSize;
+	objCbAddress += boxCBufIndex * objCBByteSize;
 
-	D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
-	cbvDesc.BufferLocation = cbAddress;
-	cbvDesc.SizeInBytes = Utils::CalcConstantBufferByteSize(sizeof(ObjectConstants));
+	D3D12_CONSTANT_BUFFER_VIEW_DESC objCbvDesc;
+	objCbvDesc.BufferLocation = objCbAddress;
+	objCbvDesc.SizeInBytes = objCBByteSize;
 
 	m_d3dDevice->CreateConstantBufferView(
-		&cbvDesc,
+		&objCbvDesc,
 		m_cbvHeap->GetCPUDescriptorHandleForHeapStart());
+
+	// Create Pass CBV
+	// ----------------------
+	mPassCB = std::make_unique<UploadBuffer<PassConstants>>(m_d3dDevice.Get(), 1, true);
+	UINT passCBByteSize = Utils::CalcConstantBufferByteSize(sizeof(PassConstants));
+	D3D12_GPU_VIRTUAL_ADDRESS passCbAddress = mPassCB->Resource()->GetGPUVirtualAddress();
+	// Offset to the ith object constant buffer in the buffer.
+	// Here our i = 0.
+	int passCbElementIndex = 0;
+	passCbAddress += passCbElementIndex * passCBByteSize;
+
+	int heapIndex = 1;
+	auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetCPUDescriptorHandleForHeapStart());
+	handle.Offset(heapIndex, m_cbv_srv_uavDescriptorSize);
+	//创建CBV描述符
+	D3D12_CONSTANT_BUFFER_VIEW_DESC passCbvDesc;
+	passCbvDesc.BufferLocation = passCbAddress;
+	passCbvDesc.SizeInBytes = passCBByteSize;
+	m_d3dDevice->CreateConstantBufferView(&passCbvDesc, handle);
 }
 
 void QDirect3D12Widget::BuildRootSignature()
@@ -224,20 +245,25 @@ void QDirect3D12Widget::BuildBoxGeometry()
 		4, 0, 3,
 		4, 3, 7
 	};
+
 	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Vertex);
 	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
+
 	mBoxGeo = std::make_unique<MeshGeometry>();
 	mBoxGeo->Name = "boxGeo";
+
 	ThrowIfFailed(D3DCreateBlob(vbByteSize, &mBoxGeo -> VertexBufferCPU));
 	CopyMemory(mBoxGeo->VertexBufferCPU -> GetBufferPointer(), vertices.data(), vbByteSize);
 	ThrowIfFailed(D3DCreateBlob(ibByteSize, &mBoxGeo -> IndexBufferCPU));
 	CopyMemory(mBoxGeo->IndexBufferCPU -> GetBufferPointer(), indices.data(), ibByteSize);
+
 	mBoxGeo->VertexBufferGPU = CreateDefaultBuffer(vbByteSize, vertices.data(), mBoxGeo->VertexBufferUploader);
 	mBoxGeo->IndexBufferGPU = CreateDefaultBuffer(ibByteSize, indices.data(), mBoxGeo->IndexBufferUploader);
 	mBoxGeo->VertexByteStride = sizeof(Vertex);
 	mBoxGeo->VertexBufferByteSize = vbByteSize;
 	mBoxGeo->IndexFormat = DXGI_FORMAT_R16_UINT;
 	mBoxGeo->IndexBufferByteSize = ibByteSize;
+
 	SubmeshGeometry submesh;
 	submesh.IndexCount = (UINT)indices.size();
 	submesh.StartIndexLocation = 0;
@@ -249,8 +275,7 @@ void QDirect3D12Widget::BuildPSO()
 {
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc;
 	ZeroMemory(&psoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
-	psoDesc.InputLayout = { mpShader->inputLayoutDesc.data(),
-	(UINT)mpShader->inputLayoutDesc.size() };
+	psoDesc.InputLayout = mpShader->GetInputLayout();
 	psoDesc.pRootSignature = mRootSignature.Get();
 	psoDesc.VS =
 	{
@@ -302,6 +327,9 @@ bool QDirect3D12Widget::Initialize()
 
 		// Wait until initialization is complete.
 		FlushCmdQueue();
+		
+		// Releasde uploader resource
+		mBoxGeo->DisposeUploaders();
 	}
 	catch (HrException& e)
 	{
@@ -339,6 +367,7 @@ void QDirect3D12Widget::Update()
 	// Update the constant buffer with the latest worldViewProj matrix.
 	ObjectConstants objConstants;
 	XMStoreFloat4x4(&objConstants.WorldViewProj, XMMatrixTranspose(worldViewProj));
+	objConstants.gTime = m_tGameTimer.TotalTime();
 	mObjectCB->CopyData(0, objConstants);
 }
 /// <summary>
@@ -502,11 +531,12 @@ void QDirect3D12Widget::CalculateFrameState()
 
 
 /// <summary>
-/// 
+/// A general way to create a ID3D12Resource
+///  + reason: an intermediate upload buffer is required to initialize the data of a default buffer
 /// </summary>
-/// <param name="byteSize"></param>
-/// <param name="initData"></param>
-/// <param name="uploadBuffer"></param>
+/// <param name="byteSize">		size of data	</param>
+/// <param name="initData">		pointer to data </param>
+/// <param name="uploadBuffer">	upload buffer	</param>
 ComPtr<ID3D12Resource> QDirect3D12Widget::CreateDefaultBuffer
 	(UINT64 byteSize, const void* initData, ComPtr<ID3D12Resource>& uploadBuffer)
 {
@@ -782,7 +812,10 @@ void QDirect3D12Widget::CreateRTV()
 /// </summary>
 void QDirect3D12Widget::CreateDSV()
 {
-	//在CPU中创建好深度模板数据资源
+	// Two steps to create a resource == buffer == ID3D12Resource
+	// 
+	// 1. Filling out a D3D12_RESOURCE_DESC structure 
+	//	在CPU中创建好深度模板数据资源
 	D3D12_RESOURCE_DESC dsvResourceDesc;
 	dsvResourceDesc.Alignment = 0;	//指定对齐
 	dsvResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;	//指定资源维度（类型）为TEXTURE2D
@@ -801,7 +834,8 @@ void QDirect3D12Widget::CreateDSV()
 	optClear.DepthStencil.Depth = 1;	//初始深度值为1
 	optClear.DepthStencil.Stencil = 0;	//初始模板值为0
 
-	//创建一个资源和一个堆，并将资源提交至堆中（将深度模板数据提交至GPU显存中）
+	// 2. calling the ID3D12Device::CreateCommittedResource method
+	//	创建一个资源和一个堆，并将资源提交至堆中（将深度模板数据提交至GPU显存中）
 	ThrowIfFailed(m_d3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),	//堆类型为默认堆（不能写入）
 		D3D12_HEAP_FLAG_NONE,	                //Flag
 		&dsvResourceDesc,	                    //上面定义的DSV资源指针

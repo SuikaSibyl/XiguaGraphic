@@ -202,6 +202,7 @@
     <ClInclude Include="header\Interaction.h" />
     <ClInclude Include="header\MathHelper.h" />
     <ClInclude Include="header\MeshGeometry.h" />
+    <ClInclude Include="header\PipelineSetting.h" />
     <ClInclude Include="header\Shader.h" />
     <ClInclude Include="header\UploadBuffer.h" />
     <ClInclude Include="header\Utility.h" />

@@ -21,6 +21,7 @@
 #include <Shader.h>
 #include <UploadBuffer.h>
 #include <MeshGeometry.h>
+#include <PipelineSetting.h>
 
 using Microsoft::WRL::ComPtr;
 
@@ -94,6 +95,7 @@ private:
     ComPtr<ID3D12PipelineState> mPSO = nullptr;
     ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
     std::unique_ptr<UploadBuffer<ObjectConstants>> mObjectCB = nullptr;
+    std::unique_ptr<UploadBuffer<PassConstants>> mPassCB = nullptr;
     std::unique_ptr<MeshGeometry> mBoxGeo = nullptr;
 
     DirectX::XMFLOAT4X4 mWorld = MathHelper::Identity4x4();
