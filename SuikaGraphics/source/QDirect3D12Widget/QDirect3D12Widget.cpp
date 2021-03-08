@@ -94,7 +94,7 @@ void QDirect3D12Widget::BuildDescriptorHeaps()
 	// 创建Descriptor heap, 并创建CBV
 	// 首先创建cbv堆
 	D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc;
-	cbvHeapDesc.NumDescriptors = objectCount + 1;
+	cbvHeapDesc.NumDescriptors = (objectCount + 1) * frameResourcesCount;
 	cbvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	cbvHeapDesc.NodeMask = 0;
@@ -106,56 +106,50 @@ void QDirect3D12Widget::BuildConstantBuffers()
 	// Create Object CBV
 	// ----------------------
 	UINT objectCount = (UINT)mMultiGeo->RenderItems.size();//物体总个数（包括实例）
-	mObjectCB = std::make_unique<UploadBuffer<ObjectConstants>>(m_d3dDevice.Get(), objectCount, true);
 	UINT objCBByteSize = Utils::CalcConstantBufferByteSize(sizeof(ObjectConstants));
 	//D3D12_GPU_VIRTUAL_ADDRESS objCbAddress = mObjectCB->Resource()->GetGPUVirtualAddress();
 	//// Offset to the ith object constant buffer in the buffer.
 	//// Here our i = 0.
-	//int boxCBufIndex = 0;
-	//objCbAddress += boxCBufIndex * objCBByteSize;
-
-	//D3D12_CONSTANT_BUFFER_VIEW_DESC objCbvDesc;
-	//objCbvDesc.BufferLocation = objCbAddress;
-	//objCbvDesc.SizeInBytes = objCBByteSize;
-
-	//m_d3dDevice->CreateConstantBufferView(
-	//	&objCbvDesc,
-	//	m_cbvHeap->GetCPUDescriptorHandleForHeapStart());
-
-	for (int i = 0; i < objectCount; i++)
+	for (int frameIndex = 0; frameIndex < frameResourcesCount; frameIndex++)
 	{
-		D3D12_GPU_VIRTUAL_ADDRESS objCB_Address;
-		objCB_Address = mObjectCB->Resource()->GetGPUVirtualAddress();
-		int objCbElementIndex = i;	//常量缓冲区子物体个数（子缓冲区个数）下标
-		objCB_Address += objCbElementIndex * objCBByteSize;//子物体在常量缓冲区中的地址
-		int heapIndex = i;	//CBV堆中的CBV元素索引
-		auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetCPUDescriptorHandleForHeapStart());//获得CBV堆首地址
-		handle.Offset(heapIndex, m_cbv_srv_uavDescriptorSize);	//CBV句柄（CBV堆中的CBV元素地址）
-		//创建CBV描述符
-		D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
-		cbvDesc.BufferLocation = objCB_Address;
-		cbvDesc.SizeInBytes = objCBByteSize;
-		m_d3dDevice->CreateConstantBufferView(&cbvDesc, handle);
+		for (int i = 0; i < objectCount; i++)
+		{
+			D3D12_GPU_VIRTUAL_ADDRESS objCB_Address;
+			objCB_Address = FrameResourcesArray[frameIndex]->objCB->Resource()->GetGPUVirtualAddress();
+			objCB_Address += i * objCBByteSize;//子物体在常量缓冲区中的地址
+			int heapIndex = objectCount * frameIndex + i;	//CBV堆中的CBV元素索引
+			auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetCPUDescriptorHandleForHeapStart());//获得CBV堆首地址
+			handle.Offset(heapIndex, m_cbv_srv_uavDescriptorSize);	//CBV句柄（CBV堆中的CBV元素地址）
+			//创建CBV描述符
+			D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
+			cbvDesc.BufferLocation = objCB_Address;
+			cbvDesc.SizeInBytes = objCBByteSize;
+			m_d3dDevice->CreateConstantBufferView(&cbvDesc, handle);
+		}
 	}
 
 	// Create Pass CBV
 	// ----------------------
-	mPassCB = std::make_unique<UploadBuffer<PassConstants>>(m_d3dDevice.Get(), 1, true);
 	UINT passCBByteSize = Utils::CalcConstantBufferByteSize(sizeof(PassConstants));
-	D3D12_GPU_VIRTUAL_ADDRESS passCbAddress = mPassCB->Resource()->GetGPUVirtualAddress();
-	// Offset to the ith object constant buffer in the buffer.
-	// Here our i = 0.
-	int passCbElementIndex = 0;
-	passCbAddress += passCbElementIndex * passCBByteSize;
 
-	int heapIndex = objectCount;
-	auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetCPUDescriptorHandleForHeapStart());
-	handle.Offset(heapIndex, m_cbv_srv_uavDescriptorSize);
-	//创建CBV描述符
-	D3D12_CONSTANT_BUFFER_VIEW_DESC passCbvDesc;
-	passCbvDesc.BufferLocation = passCbAddress;
-	passCbvDesc.SizeInBytes = passCBByteSize;
-	m_d3dDevice->CreateConstantBufferView(&passCbvDesc, handle);
+	for (int frameIndex = 0; frameIndex < frameResourcesCount; frameIndex++)
+	{
+		D3D12_GPU_VIRTUAL_ADDRESS passCbAddress;
+		passCbAddress = FrameResourcesArray[frameIndex]->passCB->Resource()->GetGPUVirtualAddress();;
+		// Offset to the ith object constant buffer in the buffer.
+		// Here our i = 0.
+		int passCbElementIndex = 0;
+		passCbAddress += passCbElementIndex * passCBByteSize;
+
+		int heapIndex = objectCount * frameResourcesCount + frameIndex;
+		auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetCPUDescriptorHandleForHeapStart());
+		handle.Offset(heapIndex, m_cbv_srv_uavDescriptorSize);
+		//创建CBV描述符
+		D3D12_CONSTANT_BUFFER_VIEW_DESC passCbvDesc;
+		passCbvDesc.BufferLocation = passCbAddress;
+		passCbvDesc.SizeInBytes = passCBByteSize;
+		m_d3dDevice->CreateConstantBufferView(&passCbvDesc, handle);
+	}
 }
 
 void QDirect3D12Widget::BuildRootSignature()
@@ -466,10 +460,10 @@ bool QDirect3D12Widget::Initialize()
 		BuildShadersAndInputLayout();
 		BuildMultiGeometry();
 		BuildRenderItem();
+		BuildFrameResources();
 		BuildDescriptorHeaps();
 		BuildConstantBuffers();
 		BuildPSO();
-		BuildFrameResources();
 
 		ThrowIfFailed(m_CommandList->Close());
 		ID3D12CommandList* cmdLists[] = { m_CommandList.Get() };
@@ -494,6 +488,7 @@ bool QDirect3D12Widget::Initialize()
 
 	return true;
 }
+
 /// <summary>
 /// LIFECYCLE :: Update (Before Draw)
 /// </summary>
@@ -527,23 +522,26 @@ void QDirect3D12Widget::Update()
 	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 	XMMATRIX view = XMMatrixLookAtLH(pos, target, up);
 	XMStoreFloat4x4(&mView, view);
-	XMMATRIX world = XMLoadFloat4x4(&mWorld);
 	XMMATRIX proj = XMLoadFloat4x4(&mProj);
 
 	XMMATRIX viewProj = view * proj; 
 	// Update the constant buffer with the latest worldViewProj matrix.
 	passConstants.gTime = m_tGameTimer.TotalTime();
 	XMStoreFloat4x4(&passConstants.viewProj, XMMatrixTranspose(viewProj));
-	mPassCB->CopyData(0, passConstants);
+	mCurrFrameResource->passCB->CopyData(0, passConstants);
 
-	//世界矩阵数据传递至GPU
 	for (auto& e : mMultiGeo->RenderItems)
 	{
-		XMMATRIX w = XMLoadFloat4x4(&e->World);
-		//XMMATRIX赋值给XMFLOAT4X4
-		XMStoreFloat4x4(&objConstants.world, XMMatrixTranspose(w));
-		//将数据拷贝至GPU缓存
-		mObjectCB->CopyData(e->ObjCBIndex, objConstants);
+		if (e->NumFramesDirty > 0)
+		{
+			XMMATRIX w = XMLoadFloat4x4(&e->World);
+			//XMMATRIX赋值给XMFLOAT4X4
+			XMStoreFloat4x4(&objConstants.world, XMMatrixTranspose(w));
+			//将数据拷贝至GPU缓存
+			mCurrFrameResource->objCB->CopyData(e->ObjCBIndex, objConstants);
+
+			e->NumFramesDirty--;
+		}
 	}
 }
 /// <summary>
@@ -555,12 +553,16 @@ void QDirect3D12Widget::Draw()
 	// Reuse the memory associated with command recording.
 	// We can only reset when the associated command lists have finished
 	// execution on the GPU.
-	ThrowIfFailed(m_DirectCmdListAlloc->Reset());//重复使用记录命令的相关内存
-	// A command list can be reset after it has been added to the
-	// command queue via ExecuteCommandList. Reusing the command
-	// list reuses memory.
-	//ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));//复用命令列表及其内存
-	ThrowIfFailed(m_CommandList->Reset(m_DirectCmdListAlloc.Get(), mPSO.Get()));//复用命令列表及其内存
+	auto currCmdAllocator = mCurrFrameResource->cmdAllocator;
+	ThrowIfFailed(currCmdAllocator->Reset());//重复使用记录命令的相关内存
+	ThrowIfFailed(m_CommandList->Reset(currCmdAllocator.Get(), mPSO.Get()));//复用命令列表及其内存
+
+	//ThrowIfFailed(m_DirectCmdListAlloc->Reset());//重复使用记录命令的相关内存
+	//// A command list can be reset after it has been added to the
+	//// command queue via ExecuteCommandList. Reusing the command
+	//// list reuses memory.
+	////ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));//复用命令列表及其内存
+	//ThrowIfFailed(m_CommandList->Reset(m_DirectCmdListAlloc.Get(), mPSO.Get()));//复用命令列表及其内存
 
 	// Indicate a state transition on the resource usage.
 	//接着我们将后台缓冲资源从呈现状态转换到渲染目标状态（即准备接收图像渲染）。
@@ -598,16 +600,16 @@ void QDirect3D12Widget::Draw()
 	m_CommandList->IASetVertexBuffers(0, 1, &mMultiGeo->VertexBufferView());
 	m_CommandList->IASetIndexBuffer(&mMultiGeo->IndexBufferView());
 	m_CommandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
 	// Set address of cbv heap to the table, and be binded to pipeline
 	//设置根描述符表
-	int objCbvIndex = 0;
+	//int objCbvIndex = 0;
+	//auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
+	//handle.Offset(objCbvIndex, m_cbv_srv_uavDescriptorSize);
+	//m_CommandList->SetGraphicsRootDescriptorTable(0, //根参数的起始索引
+	//	handle);
+	int passCbvIndex = (int)mMultiGeo->RenderItems.size() * frameResourcesCount + currFrameResourcesIndex;
 	auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
-	handle.Offset(objCbvIndex, m_cbv_srv_uavDescriptorSize);
-	m_CommandList->SetGraphicsRootDescriptorTable(0, //根参数的起始索引
-		handle);
-
-	int passCbvIndex = (int)mMultiGeo->RenderItems.size();
-	handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
 	handle.Offset(passCbvIndex, m_cbv_srv_uavDescriptorSize);
 	m_CommandList->SetGraphicsRootDescriptorTable(1, //根参数的起始索引
 		handle);
@@ -674,7 +676,7 @@ void QDirect3D12Widget::DrawRenderItems()
 		m_CommandList->IASetPrimitiveTopology(ritem->PrimitiveType);
 
 		//设置根描述符表
-		UINT objCbvIndex = ritem->ObjCBIndex;
+		UINT objCbvIndex = currFrameResourcesIndex * (UINT)mMultiGeo->RenderItems.size() + ritem->ObjCBIndex;
 		auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
 		handle.Offset(objCbvIndex, m_cbv_srv_uavDescriptorSize);
 		m_CommandList->SetGraphicsRootDescriptorTable(0, //根参数的起始索引

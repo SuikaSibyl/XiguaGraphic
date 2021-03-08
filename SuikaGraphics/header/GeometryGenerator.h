@@ -55,6 +55,7 @@ namespace ProceduralGeometry
 		// Create Geometry
 		MeshData CreateCylinder(float bottomRadius, float topRadius, float height, uint32 sliceCount, uint32 stackCount);
 		MeshData CreateGeosphere(float radius, uint32 numSubdivisions);
+		MeshData CreateGrid(float width, float depth, uint32 m, uint32 n);
 
 	private:
 		void BuildCylinderTopCap(float bottomRadius, float topRadius, float height, uint32 sliceCount, uint32 stackCount, MeshData& meshData);

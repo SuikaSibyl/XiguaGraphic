@@ -1,6 +1,8 @@
 #pragma once
 #include <Utility.h>
 
+static const int frameResourcesCount = 3;
+
 struct ObjectConstants {
     DirectX::XMFLOAT4X4 world = MathHelper::Identity4x4();
 };

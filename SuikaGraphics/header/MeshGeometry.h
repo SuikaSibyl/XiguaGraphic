@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Utility.h>
+#include <PipelineSetting.h>
 
 namespace Geometry
 {
@@ -41,7 +42,7 @@ namespace Geometry
 		// should set
 		// NumFramesDirty = gNumFrameResources so that each frame resource
 		// gets the update.
-		//int NumFramesDirty = gNumFrameResources;
+		int NumFramesDirty = frameResourcesCount;
 
 		// Index into GPU constant buffer corresponding to the ObjectCB
 		// for this render item.

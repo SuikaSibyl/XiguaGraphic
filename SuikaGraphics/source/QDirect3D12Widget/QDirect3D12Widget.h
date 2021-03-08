@@ -99,8 +99,8 @@ private:
 
     ComPtr<ID3D12PipelineState> mPSO = nullptr;
     ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
-    std::unique_ptr<UploadBuffer<ObjectConstants>> mObjectCB = nullptr;
-    std::unique_ptr<UploadBuffer<PassConstants>> mPassCB = nullptr;
+   /* std::unique_ptr<UploadBuffer<ObjectConstants>> mObjectCB = nullptr;
+    std::unique_ptr<UploadBuffer<PassConstants>> mPassCB = nullptr;*/
     std::unique_ptr<Geometry::MeshGeometry> mMultiGeo = nullptr;
 
     DirectX::XMFLOAT4X4 mWorld = MathHelper::Identity4x4();
@@ -114,7 +114,6 @@ private:
     float mPhi = DirectX::XM_PIDIV4;
     float mRadius = 5.0f;
 
-    static const int frameResourcesCount = 3;
     int currFrameResourcesIndex = 0;
     void BuildFrameResources();
     std::vector<std::unique_ptr<FrameResource>> FrameResourcesArray;

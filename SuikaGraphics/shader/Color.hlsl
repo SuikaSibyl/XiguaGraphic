@@ -1,12 +1,12 @@
 cbuffer cbPerObject : register(b0)
 {
 	float4x4 gWorld;
-	float gTime;
 };
 
 cbuffer cbPass : register(b1)
 {
 	float4x4 gViewProj;
+	float gTime;
 };
 
 struct VertexIn

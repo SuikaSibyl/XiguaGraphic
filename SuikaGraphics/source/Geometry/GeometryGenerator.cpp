@@ -157,6 +157,35 @@ GeometryGenerator::MeshData GeometryGenerator::CreateGeosphere(float radius, uin
 	return meshData;
 }
 
+GeometryGenerator::MeshData GeometryGenerator::CreateGrid(float width, float depth, uint32 m, uint32 n)
+{
+	MeshData meshData;
+	uint32 vertexCount = m * n;
+	uint32 faceCount = (m - 1) * (n - 1) * 2;
+	float halfWidth = 0.5f * width;
+	float halfDepth = 0.5f * depth;
+	float dx = width / (n - 1);
+	float dz = depth / (m - 1);
+	float du = 1.0f / (n - 1);
+	float dv = 1.0f / (m - 1); meshData.Vertices.resize(vertexCount);
+	for (uint32 i = 0; i < m; ++i)
+	{
+		float z = halfDepth - i * dz;
+		for (uint32 j = 0; j < n; ++j)
+		{
+			float x = -halfWidth + j * dx;
+			meshData.Vertices[i * n + j].Position = XMFLOAT3(x,
+				0.0f, z);
+			meshData.Vertices[i * n + j].Normal =
+				XMFLOAT3(0.0f, 1.0f, 0.0f);
+			meshData.Vertices[i * n + j].TangentU =
+				XMFLOAT3(1.0f, 0.0f, 0.0f);
+			// Stretch texture over grid.
+			meshData.Vertices[i * n + j].TexC.x = j * du;
+			meshData.Vertices[i * n + j].TexC.y = i * dv;
+		}
+	}
+}
 
 void GeometryGenerator::BuildCylinderTopCap(
 	float bottomRadius, float topRadius, float height,
