@@ -27,8 +27,10 @@
 #include <comdef.h>
 #include "d3dx12.h"
 #include <MathHelper.h>
+#include <iostream>
 
 using Microsoft::WRL::ComPtr;
+using namespace DirectX;
 
 // ############################################################################
 // ############################## Utils #######################################

@@ -46,6 +46,12 @@
     <Filter Include="Header Files\Interaction">
       <UniqueIdentifier>{a03b375f-73de-4b85-83f6-172d24632bf7}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\Geometry">
+      <UniqueIdentifier>{112b15b9-3f7f-4cce-91ed-f0c06827bdfb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Geometry">
+      <UniqueIdentifier>{5f4d36aa-882f-4e42-a2cb-4f40a758bab6}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="SuikaGraphics.qrc">
@@ -77,6 +83,9 @@
     <ClCompile Include="source\Utility\MathHelper.cpp">
       <Filter>Source Files\Utility</Filter>
     </ClCompile>
+    <ClCompile Include="source\Geometry\GeometryGenerator.cpp">
+      <Filter>Source Files\Geometry</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="header\GameTimer.h">
@@ -105,6 +114,9 @@
     </ClInclude>
     <ClInclude Include="header\PipelineSetting.h">
       <Filter>Header Files\Pipeline</Filter>
+    </ClInclude>
+    <ClInclude Include="header\GeometryGenerator.h">
+      <Filter>Header Files\Geometry</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

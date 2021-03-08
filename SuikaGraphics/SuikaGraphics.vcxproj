@@ -185,6 +185,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="source\Geometry\GeometryGenerator.cpp" />
     <ClCompile Include="source\QtInterface\main.cpp" />
     <ClCompile Include="source\QtInterface\SuikaGraphics.cpp" />
     <ClCompile Include="source\Utility\GameTimer.cpp" />
@@ -199,6 +200,7 @@
     <QtMoc Include="header\SuikaGraphics.h" />
     <ClInclude Include="header\d3dx12.h" />
     <ClInclude Include="header\GameTimer.h" />
+    <ClInclude Include="header\GeometryGenerator.h" />
     <ClInclude Include="header\Interaction.h" />
     <ClInclude Include="header\MathHelper.h" />
     <ClInclude Include="header\MeshGeometry.h" />

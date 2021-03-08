@@ -9,19 +9,13 @@
 
 #include <Shader.h>
 #include <UploadBuffer.h>
+#include <GeometryGenerator.h>
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
 
 constexpr int FPS_LIMIT = 120.0f;
 constexpr int MS_PER_FRAME = (int)((1.0f / FPS_LIMIT) * 1000.0f);
-
-//定义顶点结构体
-struct Vertex
-{
-	XMFLOAT3 Pos;
-	XMFLOAT4 Color;
-};
 
 QDirect3D12Widget::QDirect3D12Widget(QWidget* parent)
 	: QWidget(parent)
@@ -161,21 +155,25 @@ void QDirect3D12Widget::BuildRootSignature()
 	// -------------------------------------------------
 	// Root parameter can be a table, root descriptor or root constants.
 	// ---- 1.1 declare root parameter
-	CD3DX12_ROOT_PARAMETER slotRootParameter[1];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[2];
 	// ---- 1.2 create root parameter
 	//			here means to Create a single descriptor table of CBVs.
-	//			创建由单个CBV所组成的描述符表
-	CD3DX12_DESCRIPTOR_RANGE cbvTable;
-	cbvTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+	//			创建由两个CBV所组成的描述符表
+	CD3DX12_DESCRIPTOR_RANGE cbvTable0;
+	cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+	CD3DX12_DESCRIPTOR_RANGE cbvTable1;
+	cbvTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1);
+	// 描述符类型  - 描述符数量 - 描述符所绑定的寄存器槽号
 	// ---- 1.3 add content to the root parameter
-	slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable);
+	slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
+	slotRootParameter[1].InitAsDescriptorTable(1, &cbvTable1);
 
 	// 2. Create Root Signature
 	// -------------------------------------------------
 	// A root signature is an array of root parameters.
 	//根签名由一组根参数构成
 	// ---- 2.1 fill out a structure CD3DX12_ROOT_SIGNATURE_DESC
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(1,
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(2,
 		slotRootParameter, 0, nullptr,
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 	// create a root signature with a single slot which points to a
@@ -203,26 +201,91 @@ void QDirect3D12Widget::BuildShadersAndInputLayout()
 {
 	mpShader = new Shader(m_d3dDevice);
 }
+std::unordered_map<std::string, Geometry::SubmeshGeometry> DrawArgs;
+void QDirect3D12Widget::BuildMultiGeometry()
+{
+	ProceduralGeometry::GeometryGenerator geoGen;
+	ProceduralGeometry::GeometryGenerator::MeshData sphere = geoGen.CreateGeosphere(0.5f, 4);
+	ProceduralGeometry::GeometryGenerator::MeshData cylinder = geoGen.CreateCylinder(0.5f, 0.3f, 3.0f, 20, 20);
+
+	//计算单个几何体顶点在总顶点数组中的偏移量,顺序为：box、grid、sphere、cylinder
+	UINT sphereVertexOffset = 0;
+	UINT cylinderVertexOffset = (UINT)sphere.Vertices.size() + sphereVertexOffset;
+
+	//计算单个几何体索引在总索引数组中的偏移量,顺序为：box、grid、sphere、cylinder
+	UINT sphereIndexOffset = 0;
+	UINT cylinderIndexOffset = (UINT)sphere.Indices32.size() + sphereIndexOffset;
+
+
+	Geometry::SubmeshGeometry sphereSubmesh;
+	sphereSubmesh.IndexCount = (UINT)sphere.Indices32.size();
+	sphereSubmesh.BaseVertexLocation = sphereVertexOffset;
+	sphereSubmesh.StartIndexLocation = sphereIndexOffset;
+
+
+	Geometry::SubmeshGeometry cylinderSubmesh;
+	cylinderSubmesh.IndexCount = (UINT)cylinder.Indices32.size();
+	cylinderSubmesh.BaseVertexLocation = cylinderVertexOffset;
+	cylinderSubmesh.StartIndexLocation = cylinderIndexOffset;
+
+	size_t totalVertexCount = sphere.Vertices.size() +cylinder.Vertices.size();
+	std::vector<Geometry::Vertex> vertices(totalVertexCount);	//给定顶点数组大小
+	int k = 0;
+	for (int i = 0; i < sphere.Vertices.size(); i++, k++)
+	{
+		vertices[k].Pos = sphere.Vertices[i].Position;
+		vertices[k].Color = DirectX::XMFLOAT4(DirectX::Colors::Green);
+	}
+	for (int i = 0; i < cylinder.Vertices.size(); i++, k++)
+	{
+		vertices[k].Pos = cylinder.Vertices[i].Position;
+		vertices[k].Color = DirectX::XMFLOAT4(DirectX::Colors::Blue);
+	}
+
+	std::vector<std::uint16_t> indices;
+	indices.insert(indices.end(), sphere.GetIndices16().begin(), sphere.GetIndices16().end());
+	indices.insert(indices.end(), cylinder.GetIndices16().begin(), cylinder.GetIndices16().end());
+
+	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Geometry::Vertex);
+	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
+
+	mBoxGeo = std::make_unique<Geometry::MeshGeometry>();
+	mBoxGeo->Name = "boxGeo";
+
+	ThrowIfFailed(D3DCreateBlob(vbByteSize, &mBoxGeo->VertexBufferCPU));	//创建顶点数据内存空间
+	ThrowIfFailed(D3DCreateBlob(ibByteSize, &mBoxGeo->IndexBufferCPU));	//创建索引数据内存空间
+	CopyMemory(mBoxGeo->VertexBufferCPU->GetBufferPointer(), vertices.data(), vbByteSize);
+	CopyMemory(mBoxGeo->IndexBufferCPU->GetBufferPointer(), indices.data(), ibByteSize);
+	mBoxGeo->VertexBufferGPU = CreateDefaultBuffer(vbByteSize, vertices.data(), mBoxGeo->VertexBufferUploader);
+	mBoxGeo->IndexBufferGPU = CreateDefaultBuffer(ibByteSize, indices.data(), mBoxGeo->IndexBufferUploader);
+	mBoxGeo->VertexByteStride = sizeof(Geometry::Vertex);
+	mBoxGeo->VertexBufferByteSize = vbByteSize;
+	mBoxGeo->IndexFormat = DXGI_FORMAT_R16_UINT;
+	mBoxGeo->IndexBufferByteSize = ibByteSize;
+
+	mBoxGeo->DrawArgs["sphere"] = sphereSubmesh;
+	mBoxGeo->DrawArgs["cylinder"] = cylinderSubmesh;
+}
 void QDirect3D12Widget::BuildBoxGeometry()
 {
-	std::array<Vertex, 8> vertices =
+	std::array<Geometry::Vertex, 8> vertices =
 	{
-	Vertex({ XMFLOAT3(-1.0f, -1.0f, -1.0f),
-	XMFLOAT4(Colors::White) }),
-	Vertex({ XMFLOAT3(-1.0f, +1.0f, -1.0f),
-	XMFLOAT4(Colors::Black) }),
-	Vertex({ XMFLOAT3(+1.0f, +1.0f, -1.0f),
-	XMFLOAT4(Colors::Red) }),
-	Vertex({ XMFLOAT3(+1.0f, -1.0f, -1.0f),
-	XMFLOAT4(Colors::Green) }),
-	Vertex({ XMFLOAT3(-1.0f, -1.0f, +1.0f),
-	XMFLOAT4(Colors::Blue) }),
-	Vertex({ XMFLOAT3(-1.0f, +1.0f, +1.0f),
-	XMFLOAT4(Colors::Yellow) }),
-	Vertex({ XMFLOAT3(+1.0f, +1.0f, +1.0f),
-	XMFLOAT4(Colors::Cyan) }),
-	Vertex({ XMFLOAT3(+1.0f, -1.0f, +1.0f),
-	XMFLOAT4(Colors::Magenta) })
+		Geometry::Vertex({ XMFLOAT3(-1.0f, -1.0f, -1.0f),
+		XMFLOAT4(Colors::White) }),
+		Geometry::Vertex({ XMFLOAT3(-1.0f, +1.0f, -1.0f),
+		XMFLOAT4(Colors::Black) }),
+		Geometry::Vertex({ XMFLOAT3(+1.0f, +1.0f, -1.0f),
+		XMFLOAT4(Colors::Red) }),
+		Geometry::Vertex({ XMFLOAT3(+1.0f, -1.0f, -1.0f),
+		XMFLOAT4(Colors::Green) }),
+		Geometry::Vertex({ XMFLOAT3(-1.0f, -1.0f, +1.0f),
+		XMFLOAT4(Colors::Blue) }),
+		Geometry::Vertex({ XMFLOAT3(-1.0f, +1.0f, +1.0f),
+		XMFLOAT4(Colors::Yellow) }),
+		Geometry::Vertex({ XMFLOAT3(+1.0f, +1.0f, +1.0f),
+		XMFLOAT4(Colors::Cyan) }),
+		Geometry::Vertex({ XMFLOAT3(+1.0f, -1.0f, +1.0f),
+		XMFLOAT4(Colors::Magenta) })
 	};
 	std::array<std::uint16_t, 36> indices =
 	{
@@ -246,10 +309,10 @@ void QDirect3D12Widget::BuildBoxGeometry()
 		4, 3, 7
 	};
 
-	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Vertex);
+	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Geometry::Vertex);
 	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
 
-	mBoxGeo = std::make_unique<MeshGeometry>();
+	mBoxGeo = std::make_unique<Geometry::MeshGeometry>();
 	mBoxGeo->Name = "boxGeo";
 
 	ThrowIfFailed(D3DCreateBlob(vbByteSize, &mBoxGeo -> VertexBufferCPU));
@@ -259,12 +322,12 @@ void QDirect3D12Widget::BuildBoxGeometry()
 
 	mBoxGeo->VertexBufferGPU = CreateDefaultBuffer(vbByteSize, vertices.data(), mBoxGeo->VertexBufferUploader);
 	mBoxGeo->IndexBufferGPU = CreateDefaultBuffer(ibByteSize, indices.data(), mBoxGeo->IndexBufferUploader);
-	mBoxGeo->VertexByteStride = sizeof(Vertex);
+	mBoxGeo->VertexByteStride = sizeof(Geometry::Vertex);
 	mBoxGeo->VertexBufferByteSize = vbByteSize;
 	mBoxGeo->IndexFormat = DXGI_FORMAT_R16_UINT;
 	mBoxGeo->IndexBufferByteSize = ibByteSize;
 
-	SubmeshGeometry submesh;
+	Geometry::SubmeshGeometry submesh;
 	submesh.IndexCount = (UINT)indices.size();
 	submesh.StartIndexLocation = 0;
 	submesh.BaseVertexLocation = 0;
@@ -302,7 +365,8 @@ void QDirect3D12Widget::BuildPSO()
 }
 
 #pragma region LIFECYCLE
-
+UINT vertexBufferByteSize;
+UINT indexBufferByteSize;
 /// <summary>
 /// LIFECYCLE :: Initialization (First Show)
 /// </summary>
@@ -310,6 +374,7 @@ bool QDirect3D12Widget::Initialize()
 {
 	onResize();
 	InitDirect3D();
+
 	try
 	{
 		m_CommandList->Reset(m_DirectCmdListAlloc.Get(), nullptr);
@@ -318,7 +383,7 @@ bool QDirect3D12Widget::Initialize()
 		BuildConstantBuffers();
 		BuildRootSignature();
 		BuildShadersAndInputLayout();
-		BuildBoxGeometry();
+		BuildMultiGeometry();
 		BuildPSO();
 
 		ThrowIfFailed(m_CommandList->Close());
@@ -349,6 +414,9 @@ bool QDirect3D12Widget::Initialize()
 /// </summary>
 void QDirect3D12Widget::Update()
 {
+	ObjectConstants objConstants;
+	PassConstants passConstants;
+
 	//Convert Spherical to Cartesian coordinates. 
 	float x = mRadius * sinf(mPhi) * cosf(mTheta);
 	float z = mRadius * sinf(mPhi) * sinf(mTheta);
@@ -363,12 +431,14 @@ void QDirect3D12Widget::Update()
 	XMMATRIX world = XMLoadFloat4x4(&mWorld);
 	XMMATRIX proj = XMLoadFloat4x4(&mProj);
 
-	XMMATRIX worldViewProj = world * view * proj; 
+	XMMATRIX viewProj = view * proj; 
 	// Update the constant buffer with the latest worldViewProj matrix.
-	ObjectConstants objConstants;
-	XMStoreFloat4x4(&objConstants.WorldViewProj, XMMatrixTranspose(worldViewProj));
-	objConstants.gTime = m_tGameTimer.TotalTime();
+	passConstants.gTime = m_tGameTimer.TotalTime();
+	XMStoreFloat4x4(&objConstants.world, XMMatrixTranspose(world));
+	XMStoreFloat4x4(&passConstants.viewProj, XMMatrixTranspose(viewProj));
+
 	mObjectCB->CopyData(0, objConstants);
+	mPassCB->CopyData(0, passConstants);
 }
 /// <summary>
 /// LIFECYCLE :: Draw Stuff
@@ -423,16 +493,36 @@ void QDirect3D12Widget::Draw()
 	m_CommandList->IASetIndexBuffer(&mBoxGeo->IndexBufferView());
 	m_CommandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	// Set address of cbv heap to the table, and be binded to pipeline
-	m_CommandList->SetGraphicsRootDescriptorTable(0, m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
+	//设置根描述符表
+	int objCbvIndex = 0;
+	auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
+	handle.Offset(objCbvIndex, m_cbv_srv_uavDescriptorSize);
+	m_CommandList->SetGraphicsRootDescriptorTable(0, //根参数的起始索引
+		handle);
+
+	int passCbvIndex = 1;
+	handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
+	handle.Offset(passCbvIndex, m_cbv_srv_uavDescriptorSize);
+	m_CommandList->SetGraphicsRootDescriptorTable(1, //根参数的起始索引
+		handle);
+
+	//m_CommandList->SetGraphicsRootDescriptorTable(0, m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
 	m_CommandList->DrawIndexedInstanced(
-		mBoxGeo->DrawArgs["box"].IndexCount,
+		mBoxGeo->DrawArgs["sphere"].IndexCount,
 		1, 0, 0, 0);
+
+	m_CommandList->DrawIndexedInstanced(
+		mBoxGeo->DrawArgs["cylinder"].IndexCount, //每个实例要绘制的索引数
+		1,	//实例化个数
+		mBoxGeo->DrawArgs["cylinder"].StartIndexLocation,	//起始索引位置
+		mBoxGeo->DrawArgs["cylinder"].BaseVertexLocation,	//子物体起始索引在全局索引中的位置
+		0);	//实例化的高级技术，暂时设置为0
 
 	// Indicate a state transition on the resource usage.
 	// 等到渲染完成，我们要将后台缓冲区的状态改成呈现状态，使其之后推到前台缓冲区显示。完了，关闭命令列表，等待传入命令队列。
 	m_CommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_SwapChainBuffer[ref_mCurrentBackBuffer].Get(),
 		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));//从渲染目标到呈现
-	// 完成命令的记录关闭命令列表
+	// 完成命令的记录关闭命令列表 
 	ThrowIfFailed(m_CommandList->Close());
 
 	// Add the command list to the queue for execution.

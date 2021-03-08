@@ -82,7 +82,9 @@ private:
     void BuildConstantBuffers();
     void BuildRootSignature();
     void BuildShadersAndInputLayout();
-    void BuildBoxGeometry();
+    // ------------------------
+    void BuildBoxGeometry(); 
+    void BuildMultiGeometry();
     void BuildPSO();
 
     //Default buffer
@@ -96,7 +98,7 @@ private:
     ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
     std::unique_ptr<UploadBuffer<ObjectConstants>> mObjectCB = nullptr;
     std::unique_ptr<UploadBuffer<PassConstants>> mPassCB = nullptr;
-    std::unique_ptr<MeshGeometry> mBoxGeo = nullptr;
+    std::unique_ptr<Geometry::MeshGeometry> mBoxGeo = nullptr;
 
     DirectX::XMFLOAT4X4 mWorld = MathHelper::Identity4x4();
     DirectX::XMFLOAT4X4 mView = MathHelper::Identity4x4();
