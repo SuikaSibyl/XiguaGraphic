@@ -86,6 +86,9 @@
     <ClCompile Include="source\Geometry\GeometryGenerator.cpp">
       <Filter>Source Files\Geometry</Filter>
     </ClCompile>
+    <ClCompile Include="source\Pipeline\FrameResource.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="header\GameTimer.h">
@@ -117,6 +120,9 @@
     </ClInclude>
     <ClInclude Include="header\GeometryGenerator.h">
       <Filter>Header Files\Geometry</Filter>
+    </ClInclude>
+    <ClInclude Include="header\FrameResources.h">
+      <Filter>Header Files\Pipeline</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
