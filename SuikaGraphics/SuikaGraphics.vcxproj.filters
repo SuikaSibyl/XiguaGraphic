@@ -52,6 +52,9 @@
     <Filter Include="Source Files\Geometry">
       <UniqueIdentifier>{5f4d36aa-882f-4e42-a2cb-4f40a758bab6}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\Pipeline">
+      <UniqueIdentifier>{bbe35db8-05ab-46dd-aeb2-aa408c202996}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="SuikaGraphics.qrc">
@@ -62,9 +65,6 @@
     </QtUic>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="source\QDirect3D12Widget\QDirect3D12Widget.cpp">
-      <Filter>Source Files\QDirect3D12Widget</Filter>
-    </ClCompile>
     <ClCompile Include="source\QtInterface\main.cpp">
       <Filter>Source Files\QtInterface</Filter>
     </ClCompile>
@@ -88,6 +88,12 @@
     </ClCompile>
     <ClCompile Include="source\Pipeline\FrameResource.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\RenderItemManagment.cpp">
+      <Filter>Source Files\Pipeline</Filter>
+    </ClCompile>
+    <ClCompile Include="source\QDirect3D12Widget\QDirect3D12Widget.cpp">
+      <Filter>Source Files\QDirect3D12Widget</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -122,6 +128,9 @@
       <Filter>Header Files\Geometry</Filter>
     </ClInclude>
     <ClInclude Include="header\FrameResources.h">
+      <Filter>Header Files\Pipeline</Filter>
+    </ClInclude>
+    <ClInclude Include="header\RenderItemManagment.h">
       <Filter>Header Files\Pipeline</Filter>
     </ClInclude>
   </ItemGroup>

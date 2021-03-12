@@ -5,7 +5,7 @@
 
 namespace Geometry
 {
-	//定义顶点结构体
+	// Define the vertex struct
 	struct Vertex
 	{
 		XMFLOAT3 Pos;
@@ -27,14 +27,18 @@ namespace Geometry
 		DirectX::BoundingBox Bounds;
 	};
 
+	struct MeshGeometry;
+
 	// Lightweight structure stores parameters to draw a shape.This will vary from app-to-app.
 	struct RenderItem
 	{
 		RenderItem() = default;
+
 		// World matrix of the shape that describes the object’s local space
 		// relative to the world space, which defines the position,
 		// orientation, and scale of the object in the world.
 		XMFLOAT4X4 World = MathHelper::Identity4x4();
+
 		// Dirty flag indicating the object data has changed and we need
 		// to update the constant buffer. Because we have an object
 		// cbuffer for each FrameResource, we have to apply the
@@ -47,6 +51,11 @@ namespace Geometry
 		// Index into GPU constant buffer corresponding to the ObjectCB
 		// for this render item.
 		UINT ObjCBIndex = -1;
+
+		// Geometry associated with this render-item. Note that multiple
+		// render-items can share the same geometry.
+		MeshGeometry* Geo = nullptr;
+
 		// Geometry associated with this render-item. Note that multiple
 		// render-items can share the same geometry.MeshGeometry* Geo = nullptr;
 		// Primitive topology.

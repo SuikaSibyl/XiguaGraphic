@@ -187,15 +187,16 @@
   <ItemGroup>
     <ClCompile Include="source\Geometry\GeometryGenerator.cpp" />
     <ClCompile Include="source\Pipeline\FrameResource.cpp" />
+    <ClCompile Include="source\QDirect3D12Widget\QDirect3D12Widget.cpp" />
     <ClCompile Include="source\QtInterface\main.cpp" />
     <ClCompile Include="source\QtInterface\SuikaGraphics.cpp" />
+    <ClCompile Include="source\RenderItemManagment.cpp" />
     <ClCompile Include="source\Utility\GameTimer.cpp" />
     <ClCompile Include="source\Utility\MathHelper.cpp" />
     <ClCompile Include="source\Utility\Shader.cpp" />
     <ClCompile Include="source\Utility\Utility.cpp" />
     <QtRcc Include="SuikaGraphics.qrc" />
     <QtUic Include="SuikaGraphics.ui" />
-    <ClCompile Include="source\QDirect3D12Widget\QDirect3D12Widget.cpp" />
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="header\SuikaGraphics.h" />
@@ -207,6 +208,7 @@
     <ClInclude Include="header\MathHelper.h" />
     <ClInclude Include="header\MeshGeometry.h" />
     <ClInclude Include="header\PipelineSetting.h" />
+    <ClInclude Include="header\RenderItemManagment.h" />
     <ClInclude Include="header\Shader.h" />
     <ClInclude Include="header\UploadBuffer.h" />
     <ClInclude Include="header\Utility.h" />

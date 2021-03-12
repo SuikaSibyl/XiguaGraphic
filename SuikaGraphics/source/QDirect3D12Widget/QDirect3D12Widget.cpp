@@ -18,6 +18,314 @@ using Geometry::RenderItem;
 constexpr int FPS_LIMIT = 120.0f;
 constexpr int MS_PER_FRAME = (int)((1.0f / FPS_LIMIT) * 1000.0f);
 
+#pragma region LIFECYCLE
+UINT vertexBufferByteSize;
+UINT indexBufferByteSize;
+/// <summary>
+/// LIFECYCLE :: Initialization (First Show)
+/// </summary>
+bool QDirect3D12Widget::Initialize()
+{
+	// First resize, will calc mProj
+	onResize();
+
+	// Initialize Direct3D
+	InitDirect3D();
+
+	try
+	{
+		m_CommandList->Reset(m_DirectCmdListAlloc.Get(), nullptr);
+
+		BuildRootSignature2();
+		BuildShadersAndInputLayout();
+		//BuildMultiGeometry();
+		BuildLandGeometry();
+		//BuildRenderItem();
+		BuildFrameResources();
+		//BuildDescriptorHeaps();
+		//BuildConstantBuffers();
+		BuildPSO();
+
+		ThrowIfFailed(m_CommandList->Close());
+		ID3D12CommandList* cmdLists[] = { m_CommandList.Get() };
+		m_CommandQueue->ExecuteCommandLists(_countof(cmdLists), cmdLists);
+
+		// Wait until initialization is complete.
+		FlushCmdQueue();
+
+		// Releasde uploader resource
+		mMultiGeo->DisposeUploaders();
+	}
+	catch (HrException& e)
+	{
+		MessageBox(nullptr, e.ToLPCWSTR(), L"HR  Failed", MB_OK);
+		return 0;
+	}
+
+	// Start FrameLoop
+	connect(&m_qTimer, &QTimer::timeout, this, &QDirect3D12Widget::onFrame);
+	// Start Timer
+	m_tGameTimer.Reset();
+
+	return true;
+}
+
+/// <summary>
+/// LIFECYCLE :: Update (Before Draw)
+/// </summary>
+void QDirect3D12Widget::Update()
+{
+	// Cycle through the circular frame resource array.
+	currFrameResourcesIndex = (currFrameResourcesIndex + 1) % frameResourcesCount;
+	mCurrFrameResource = FrameResourcesArray[currFrameResourcesIndex].get();
+	// Has the GPU finished processing the commands of the current frame resource.
+	// If not, wait until the GPU has completed commands up to this fence point.
+	//如果GPU端围栏值小于CPU端围栏值，即CPU速度快于GPU，则令CPU等待
+	if (mCurrFrameResource->fenceCPU != 0 && m_fence->GetCompletedValue() < mCurrFrameResource->fenceCPU)
+	{
+		HANDLE eventHandle = CreateEvent(nullptr, false, false, L"FenceSetDone");
+		ThrowIfFailed(m_fence->SetEventOnCompletion(mCurrFrameResource->fenceCPU, eventHandle));
+		WaitForSingleObject(eventHandle, INFINITE);
+		CloseHandle(eventHandle);
+	}
+
+	ObjectConstants objConstants;
+	PassConstants passConstants;
+
+	//Convert Spherical to Cartesian coordinates. 
+	float x = mRadius * sinf(mPhi) * cosf(mTheta);
+	float z = mRadius * sinf(mPhi) * sinf(mTheta);
+	float y = mRadius * cosf(mPhi);
+	// Build the view matrix. 
+
+	XMVECTOR pos = XMVectorSet(x, y, z, 1.0f);
+	XMVECTOR target = XMVectorZero();
+	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+	XMMATRIX view = XMMatrixLookAtLH(pos, target, up);
+	XMStoreFloat4x4(&mView, view);
+	XMMATRIX proj = XMLoadFloat4x4(&mProj);
+
+	XMMATRIX viewProj = view * proj;
+	// Update the constant buffer with the latest worldViewProj matrix.
+	passConstants.gTime = m_tGameTimer.TotalTime();
+	XMStoreFloat4x4(&passConstants.viewProj, XMMatrixTranspose(viewProj));
+	mCurrFrameResource->passCB->CopyData(0, passConstants);
+
+	for (auto& e : mMultiGeo->RenderItems)
+	{
+		if (e->NumFramesDirty > 0)
+		{
+			XMMATRIX w = XMLoadFloat4x4(&e->World);
+			//XMMATRIX赋值给XMFLOAT4X4
+			XMStoreFloat4x4(&objConstants.world, XMMatrixTranspose(w));
+			//将数据拷贝至GPU缓存
+			mCurrFrameResource->objCB->CopyData(e->ObjCBIndex, objConstants);
+
+			e->NumFramesDirty--;
+		}
+	}
+}
+/// <summary>
+/// LIFECYCLE :: Draw Stuff
+/// </summary>
+void QDirect3D12Widget::Draw()
+{
+	//首先重置命令分配器cmdAllocator和命令列表cmdList，目的是重置命令和列表，复用相关内存。
+	// Reuse the memory associated with command recording.
+	// We can only reset when the associated command lists have finished
+	// execution on the GPU.
+	auto currCmdAllocator = mCurrFrameResource->cmdAllocator;
+	DXCall(currCmdAllocator->Reset());//重复使用记录命令的相关内存
+	DXCall(m_CommandList->Reset(currCmdAllocator.Get(), mPSO.Get()));//复用命令列表及其内存
+
+	// Indicate a state transition on the resource usage.
+	//接着我们将后台缓冲资源从呈现状态转换到渲染目标状态（即准备接收图像渲染）。
+	UINT& ref_mCurrentBackBuffer = mCurrentBackBuffer;
+	m_CommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_SwapChainBuffer[ref_mCurrentBackBuffer].Get(),//转换资源为后台缓冲区资源
+		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));//从呈现到渲染目标转换
+
+	//接下来设置视口和裁剪矩形。
+	m_CommandList->RSSetViewports(1, &viewPort);
+	m_CommandList->RSSetScissorRects(1, &scissorRect);
+
+	// Clear the back buffer and depth buffer.
+	//然后清除后台缓冲区和深度缓冲区，并赋值。步骤是先获得堆中描述符句柄（即地址），再通过ClearRenderTargetView函数和ClearDepthStencilView函数做清除和赋值。这里我们将RT资源背景色赋值为DarkRed（暗红）。
+	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), ref_mCurrentBackBuffer, m_rtvDescriptorSize);
+	m_CommandList->ClearRenderTargetView(rtvHandle, DirectX::Colors::DarkRed, 0, nullptr);//清除RT背景色为暗红，并且不设置裁剪矩形
+	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = m_dsvHeap->GetCPUDescriptorHandleForHeapStart();
+	m_CommandList->ClearDepthStencilView(dsvHandle,	//DSV描述符句柄
+		D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL,	//FLAG
+		1.0f,	//默认深度值
+		0,	//默认模板值
+		0,	//裁剪矩形数量
+		nullptr);	//裁剪矩形指针
+
+	// Specify the buffers we are going to render to. 
+	//mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
+	//然后我们指定将要渲染的缓冲区，即指定RTV和DSV。
+	m_CommandList->OMSetRenderTargets(1,//待绑定的RTV数量
+		&rtvHandle,	//指向RTV数组的指针
+		true,	//RTV对象在堆内存中是连续存放的
+		&dsvHandle);	//指向DSV的指针
+
+	//ID3D12DescriptorHeap* descriptorHeaps[] = { m_cbvHeap.Get() };
+	//m_CommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
+	m_CommandList->SetGraphicsRootSignature(mRootSignature.Get());
+	m_CommandList->IASetVertexBuffers(0, 1, &mMultiGeo->VertexBufferView());
+	m_CommandList->IASetIndexBuffer(&mMultiGeo->IndexBufferView());
+	m_CommandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	// Set address of cbv heap to the table, and be binded to pipeline
+	//设置根描述符表
+	//int objCbvIndex = 0;
+	//auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
+	//handle.Offset(objCbvIndex, m_cbv_srv_uavDescriptorSize);
+	//m_CommandList->SetGraphicsRootDescriptorTable(0, //根参数的起始索引
+	//	handle);
+
+
+	//int passCbvIndex = (int)mMultiGeo->RenderItems.size() * frameResourcesCount + currFrameResourcesIndex;
+	//auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
+	//handle.Offset(passCbvIndex, m_cbv_srv_uavDescriptorSize);
+	//m_CommandList->SetGraphicsRootDescriptorTable(1, //根参数的起始索引
+	//	handle);
+
+	UINT passConstSize = Utils::CalcConstantBufferByteSize(sizeof(PassConstants));
+	auto passCB = mCurrFrameResource->passCB-> Resource();
+	m_CommandList->SetGraphicsRootConstantBufferView(1, passCB-> GetGPUVirtualAddress());
+
+	DrawRenderItems();
+
+	////m_CommandList->SetGraphicsRootDescriptorTable(0, m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
+	//m_CommandList->DrawIndexedInstanced(
+	//	mMultiGeo->DrawArgs["sphere"].IndexCount,
+	//	1, 0, 0, 0);
+
+	//m_CommandList->DrawIndexedInstanced(
+	//	mMultiGeo->DrawArgs["cylinder"].IndexCount, //每个实例要绘制的索引数
+	//	1,	//实例化个数
+	//	mMultiGeo->DrawArgs["cylinder"].StartIndexLocation,	//起始索引位置
+	//	mMultiGeo->DrawArgs["cylinder"].BaseVertexLocation,	//子物体起始索引在全局索引中的位置
+	//	0);	//实例化的高级技术，暂时设置为0
+
+	// Indicate a state transition on the resource usage.
+	// 等到渲染完成，我们要将后台缓冲区的状态改成呈现状态，使其之后推到前台缓冲区显示。完了，关闭命令列表，等待传入命令队列。
+	m_CommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_SwapChainBuffer[ref_mCurrentBackBuffer].Get(),
+		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));//从渲染目标到呈现
+	// 完成命令的记录关闭命令列表 
+	ThrowIfFailed(m_CommandList->Close());
+
+	// Add the command list to the queue for execution.
+	//等CPU将命令都准备好后，需要将待执行的命令列表加入GPU的命令队列。使用的是ExecuteCommandLists函数。
+	ID3D12CommandList* commandLists[] = { m_CommandList.Get() };//声明并定义命令列表数组
+	m_CommandQueue->ExecuteCommandLists(_countof(commandLists), commandLists);//将命令从命令列表传至命令队列
+
+	// swap the back and front buffers
+	ThrowIfFailed(m_SwapChain->Present(0, 0));
+	ref_mCurrentBackBuffer = (ref_mCurrentBackBuffer + 1) % 2;
+
+	//// Wait until frame commands are complete. This waiting is
+	//// inefficient and is done for simplicity. Later we will show how to
+	//// organize our rendering code so we do not have to wait per frame.
+	//FlushCmdQueue();
+
+	// Advance the fence value to mark commands up to this fence point.
+	mCurrFrameResource->fenceCPU = ++mCurrentFence;
+	// Add an instruction to the command queue to set a new fence point.
+	// Because we are on the GPU timeline, the new fence point won’t be
+	// set until the GPU finishes processing all the commands prior to
+	// this Signal().
+	m_CommandQueue->Signal(m_fence.Get(), mCurrentFence);
+	// Note that GPU could still be working on commands from previous
+	// frames, but that is okay, because we are not touching any frame
+	// resources associated with those frames.
+}
+void QDirect3D12Widget::DrawRenderItems()
+{
+	//将智能指针数组转换成普通指针数组
+	std::vector<RenderItem*> ritems;
+	for (auto& e : mMultiGeo->RenderItems)
+		ritems.push_back(e.get());
+
+	auto objectCB = mCurrFrameResource->objCB->Resource();
+	INT objCBByteSize = Utils::CalcConstantBufferByteSize(sizeof(ObjectConstants));
+
+	//遍历渲染项数组
+	for (size_t i = 0; i < ritems.size(); i++)
+	{
+		auto ritem = ritems[i];
+
+		m_CommandList->IASetVertexBuffers(0, 1, &mMultiGeo->VertexBufferView());
+		m_CommandList->IASetIndexBuffer(&mMultiGeo->IndexBufferView());
+		m_CommandList->IASetPrimitiveTopology(ritem->PrimitiveType);
+
+		//UINT objCbvIndex = currFrameResourcesIndex * (UINT)mMultiGeo->RenderItems.size() + ritem->ObjCBIndex;
+		//D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress();
+		//objCBAddress += objCbvIndex * objCBByteSize;
+		//m_CommandList->SetGraphicsRootConstantBufferView(0, objCBAddress);
+
+		//设置根描述符,将根描述符与资源绑定
+		auto objCB = mCurrFrameResource->objCB->Resource();
+		auto objCBAddress = objCB->GetGPUVirtualAddress();
+		objCBAddress += ritem->ObjCBIndex * objCBByteSize;
+		m_CommandList->SetGraphicsRootConstantBufferView(0,//寄存器槽号
+			objCBAddress);//子资源地址
+
+		////设置根描述符表
+		//UINT objCbvIndex = currFrameResourcesIndex * (UINT)mMultiGeo->RenderItems.size() + ritem->ObjCBIndex;
+		//auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
+		//handle.Offset(objCbvIndex, m_cbv_srv_uavDescriptorSize);
+		//m_CommandList->SetGraphicsRootDescriptorTable(0, //根参数的起始索引
+		//	handle);
+
+		//绘制顶点（通过索引缓冲区绘制）
+		m_CommandList->DrawIndexedInstanced(ritem->IndexCount, //每个实例要绘制的索引数
+			1,	//实例化个数
+			ritem->StartIndexLocation,	//起始索引位置
+			ritem->BaseVertexLocation,	//子物体起始索引在全局索引中的位置
+			0);	//实例化的高级技术，暂时设置为0
+	}
+}
+#pragma endregion
+
+void QDirect3D12Widget::DrawRenderItems2()
+{
+	UINT objectCount = (UINT)mMultiGeo->RenderItems.size();//物体总个数（包括实例）
+	UINT objConstSize = Utils::CalcConstantBufferByteSize(sizeof(ObjectConstants));
+	UINT passConstSize = Utils::CalcConstantBufferByteSize(sizeof(PassConstants));
+	UINT objCBByteSize = objConstSize;
+	UINT passCBByteSize = passConstSize;
+
+	//将智能指针数组转换成普通指针数组
+	std::vector<RenderItem*> ritems;
+	for (auto& e : mMultiGeo->RenderItems)
+		ritems.push_back(e.get());
+
+	//遍历渲染项数组
+	for (size_t i = 0; i < ritems.size(); i++)
+	{
+		auto ritem = ritems[i];
+
+		m_CommandList->IASetVertexBuffers(0, 1, &mMultiGeo->VertexBufferView());
+		m_CommandList->IASetIndexBuffer(&mMultiGeo->IndexBufferView());
+		m_CommandList->IASetPrimitiveTopology(ritem->PrimitiveType);
+
+		//设置根描述符,将根描述符与资源绑定
+		auto objCB = mCurrFrameResource->objCB->Resource();
+		auto objCBAddress = objCB->GetGPUVirtualAddress();
+		objCBAddress += ritem->ObjCBIndex * objCBByteSize;
+		m_CommandList->SetGraphicsRootConstantBufferView(0,//寄存器槽号
+			objCBAddress);//子资源地址
+
+		//绘制顶点（通过索引缓冲区绘制）
+		m_CommandList->DrawIndexedInstanced(ritem->IndexCount, //每个实例要绘制的索引数
+			1,	//实例化个数
+			ritem->StartIndexLocation,	//起始索引位置
+			ritem->BaseVertexLocation,	//子物体起始索引在全局索引中的位置
+			0);	//实例化的高级技术，暂时设置为0
+	}
+}
+
 QDirect3D12Widget::QDirect3D12Widget(QWidget* parent)
 	: QWidget(parent)
 	, m_hWnd(reinterpret_cast<HWND>(winId()))
@@ -151,6 +459,75 @@ void QDirect3D12Widget::BuildConstantBuffers()
 		m_d3dDevice->CreateConstantBufferView(&passCbvDesc, handle);
 	}
 }
+float GetHeight(float x, float z){
+	return 0.3f * (z * sinf(0.1f * x) + x * cosf(0.1f * z));
+}
+
+void QDirect3D12Widget::BuildLandGeometry() {
+	ProceduralGeometry::GeometryGenerator geoGen;
+	ProceduralGeometry::GeometryGenerator::MeshData grid =
+		geoGen.CreateGrid(160.0f, 160.0f, 50, 50);
+	//
+	// Extract the vertex elements we are interested and apply the height
+	// function to each vertex. In addition, color the vertices based on
+	// their height so we have sandy looking beaches, grassy low hills,
+	// and snow mountain peaks.
+	//
+	std::vector<Geometry::Vertex> vertices(grid.Vertices.size());
+	for (size_t i = 0; i < grid.Vertices.size(); ++i)
+	{
+		auto& p = grid.Vertices[i].Position;
+		vertices[i].Pos = p;
+		vertices[i].Pos.y = GetHeight(p.x, p.z);
+		// Color the vertex based on its height.
+		if (vertices[i].Pos.y < -10.0f)
+		{
+			// Sandy beach color.
+			vertices[i].Color = XMFLOAT4(1.0f, 0.96f, 0.62f,
+				1.0f);
+		}
+		else if (vertices[i].Pos.y < 5.0f)
+		{
+			// Light yellow-green.
+			vertices[i].Color = XMFLOAT4(0.48f, 0.77f,
+				0.46f, 1.0f);
+		}
+		else if (vertices[i].Pos.y < 12.0f)
+		{
+			// Dark yellow-green.
+			vertices[i].Color = XMFLOAT4(0.1f, 0.48f, 0.19f,
+				1.0f);
+		}
+		else if (vertices[i].Pos.y < 20.0f)
+		{
+			// Dark brown.
+			vertices[i].Color = XMFLOAT4(0.45f, 0.39f,
+				0.34f, 1.0f);
+		}
+		else
+		{
+			// White snow.
+			vertices[i].Color = XMFLOAT4(1.0f, 1.0f, 1.0f,
+				1.0f);
+		}
+	}
+	std::vector<std::uint16_t> indices = grid.GetIndices16();
+
+	MeshGeometryHelper helper(this);
+	helper.PushSubmeshGeometry("grid", vertices, indices);
+	std::unique_ptr<MeshGeometry> geo = helper.CreateMeshGeometry("landGeo");
+
+	mMultiGeo = std::move(geo);
+
+	auto gridRitem = std::make_unique<RenderItem>();
+	gridRitem->World = MathHelper::Identity4x4();
+	gridRitem->ObjCBIndex = 0;//grid常量数据（world矩阵）在objConstantBuffer索引0上
+	gridRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	gridRitem->IndexCount = mMultiGeo->DrawArgs["grid"].IndexCount;
+	gridRitem->BaseVertexLocation = mMultiGeo->DrawArgs["grid"].BaseVertexLocation;
+	gridRitem->StartIndexLocation = mMultiGeo->DrawArgs["grid"].StartIndexLocation;
+	mMultiGeo->RenderItems.push_back(std::move(gridRitem));
+}
 
 void QDirect3D12Widget::BuildRootSignature()
 {
@@ -211,6 +588,35 @@ void QDirect3D12Widget::BuildRootSignature()
 		serializedRootSig->GetBufferSize(),
 		IID_PPV_ARGS(&mRootSignature)));
 }
+
+void QDirect3D12Widget::BuildRootSignature2()
+{
+	//根参数可以是描述符表、根描述符、根常量
+	CD3DX12_ROOT_PARAMETER slotRootParameter[2];
+	slotRootParameter[0].InitAsConstantBufferView(0);
+	slotRootParameter[1].InitAsConstantBufferView(1);
+
+	//根签名由一组根参数构成
+	CD3DX12_ROOT_SIGNATURE_DESC rootSig(2, //根参数的数量
+		slotRootParameter, //根参数指针
+		0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+	//用单个寄存器槽来创建一个根签名，该槽位指向一个仅含有单个常量缓冲区的描述符区域
+	ComPtr<ID3DBlob> serializedRootSig = nullptr;
+	ComPtr<ID3DBlob> errorBlob = nullptr;
+	HRESULT hr = D3D12SerializeRootSignature(&rootSig, D3D_ROOT_SIGNATURE_VERSION_1, &serializedRootSig, &errorBlob);
+
+	if (errorBlob != nullptr)
+	{
+		OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+	}
+	ThrowIfFailed(hr);
+
+	ThrowIfFailed(m_d3dDevice->CreateRootSignature(0,
+		serializedRootSig->GetBufferPointer(),
+		serializedRootSig->GetBufferSize(),
+		IID_PPV_ARGS(&mRootSignature)));
+}
+
 void QDirect3D12Widget::BuildShadersAndInputLayout()
 {
 	mpShader = new Shader(m_d3dDevice);
@@ -441,257 +847,6 @@ void QDirect3D12Widget::BuildFrameResources()
 	}
 }
 
-#pragma region LIFECYCLE
-UINT vertexBufferByteSize;
-UINT indexBufferByteSize;
-/// <summary>
-/// LIFECYCLE :: Initialization (First Show)
-/// </summary>
-bool QDirect3D12Widget::Initialize()
-{
-	onResize();
-	InitDirect3D();
-
-	try
-	{
-		m_CommandList->Reset(m_DirectCmdListAlloc.Get(), nullptr);
-
-		BuildRootSignature();
-		BuildShadersAndInputLayout();
-		BuildMultiGeometry();
-		BuildRenderItem();
-		BuildFrameResources();
-		BuildDescriptorHeaps();
-		BuildConstantBuffers();
-		BuildPSO();
-
-		ThrowIfFailed(m_CommandList->Close());
-		ID3D12CommandList* cmdLists[] = { m_CommandList.Get() };
-		m_CommandQueue->ExecuteCommandLists(_countof(cmdLists), cmdLists);
-
-		// Wait until initialization is complete.
-		FlushCmdQueue();
-		
-		// Releasde uploader resource
-		mMultiGeo->DisposeUploaders();
-	}
-	catch (HrException& e)
-	{
-		MessageBox(nullptr, e.ToLPCWSTR(), L"HR  Failed", MB_OK);
-		return 0;
-	}
-
-	// Start FrameLoop
-	connect(&m_qTimer, &QTimer::timeout, this, &QDirect3D12Widget::onFrame);
-	// Start Timer
-	m_tGameTimer.Reset();
-
-	return true;
-}
-
-/// <summary>
-/// LIFECYCLE :: Update (Before Draw)
-/// </summary>
-void QDirect3D12Widget::Update()
-{
-	// Cycle through the circular frame resource array.
-	currFrameResourcesIndex = (currFrameResourcesIndex + 1) % frameResourcesCount;
-	mCurrFrameResource = FrameResourcesArray[currFrameResourcesIndex].get();
-	// Has the GPU finished processing the commands of the current frame resource.
-	// If not, wait until the GPU has completed commands up to this fence point.
-	//如果GPU端围栏值小于CPU端围栏值，即CPU速度快于GPU，则令CPU等待
-	if (mCurrFrameResource->fenceCPU != 0 && m_fence->GetCompletedValue() < mCurrFrameResource->fenceCPU)
-	{
-		HANDLE eventHandle = CreateEvent(nullptr, false, false, L"FenceSetDone");
-		ThrowIfFailed(m_fence->SetEventOnCompletion(mCurrFrameResource->fenceCPU, eventHandle));
-		WaitForSingleObject(eventHandle, INFINITE);
-		CloseHandle(eventHandle);
-	}
-
-	ObjectConstants objConstants;
-	PassConstants passConstants;
-
-	//Convert Spherical to Cartesian coordinates. 
-	float x = mRadius * sinf(mPhi) * cosf(mTheta);
-	float z = mRadius * sinf(mPhi) * sinf(mTheta);
-	float y = mRadius * cosf(mPhi);
-	// Build the view matrix. 
-
-	XMVECTOR pos = XMVectorSet(x, y, z, 1.0f);
-	XMVECTOR target = XMVectorZero();
-	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-	XMMATRIX view = XMMatrixLookAtLH(pos, target, up);
-	XMStoreFloat4x4(&mView, view);
-	XMMATRIX proj = XMLoadFloat4x4(&mProj);
-
-	XMMATRIX viewProj = view * proj; 
-	// Update the constant buffer with the latest worldViewProj matrix.
-	passConstants.gTime = m_tGameTimer.TotalTime();
-	XMStoreFloat4x4(&passConstants.viewProj, XMMatrixTranspose(viewProj));
-	mCurrFrameResource->passCB->CopyData(0, passConstants);
-
-	for (auto& e : mMultiGeo->RenderItems)
-	{
-		if (e->NumFramesDirty > 0)
-		{
-			XMMATRIX w = XMLoadFloat4x4(&e->World);
-			//XMMATRIX赋值给XMFLOAT4X4
-			XMStoreFloat4x4(&objConstants.world, XMMatrixTranspose(w));
-			//将数据拷贝至GPU缓存
-			mCurrFrameResource->objCB->CopyData(e->ObjCBIndex, objConstants);
-
-			e->NumFramesDirty--;
-		}
-	}
-}
-/// <summary>
-/// LIFECYCLE :: Draw Stuff
-/// </summary>
-void QDirect3D12Widget::Draw()
-{
-	//首先重置命令分配器cmdAllocator和命令列表cmdList，目的是重置命令和列表，复用相关内存。
-	// Reuse the memory associated with command recording.
-	// We can only reset when the associated command lists have finished
-	// execution on the GPU.
-	auto currCmdAllocator = mCurrFrameResource->cmdAllocator;
-	ThrowIfFailed(currCmdAllocator->Reset());//重复使用记录命令的相关内存
-	ThrowIfFailed(m_CommandList->Reset(currCmdAllocator.Get(), mPSO.Get()));//复用命令列表及其内存
-
-	//ThrowIfFailed(m_DirectCmdListAlloc->Reset());//重复使用记录命令的相关内存
-	//// A command list can be reset after it has been added to the
-	//// command queue via ExecuteCommandList. Reusing the command
-	//// list reuses memory.
-	////ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));//复用命令列表及其内存
-	//ThrowIfFailed(m_CommandList->Reset(m_DirectCmdListAlloc.Get(), mPSO.Get()));//复用命令列表及其内存
-
-	// Indicate a state transition on the resource usage.
-	//接着我们将后台缓冲资源从呈现状态转换到渲染目标状态（即准备接收图像渲染）。
-	UINT& ref_mCurrentBackBuffer = mCurrentBackBuffer;
-	m_CommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_SwapChainBuffer[ref_mCurrentBackBuffer].Get(),//转换资源为后台缓冲区资源
-		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));//从呈现到渲染目标转换
-
-	//接下来设置视口和裁剪矩形。
-	m_CommandList->RSSetViewports(1, &viewPort);
-	m_CommandList->RSSetScissorRects(1, &scissorRect);
-
-	// Clear the back buffer and depth buffer.
-	//然后清除后台缓冲区和深度缓冲区，并赋值。步骤是先获得堆中描述符句柄（即地址），再通过ClearRenderTargetView函数和ClearDepthStencilView函数做清除和赋值。这里我们将RT资源背景色赋值为DarkRed（暗红）。
-	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), ref_mCurrentBackBuffer, m_rtvDescriptorSize);
-	m_CommandList->ClearRenderTargetView(rtvHandle, DirectX::Colors::DarkRed, 0, nullptr);//清除RT背景色为暗红，并且不设置裁剪矩形
-	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = m_dsvHeap->GetCPUDescriptorHandleForHeapStart();
-	m_CommandList->ClearDepthStencilView(dsvHandle,	//DSV描述符句柄
-		D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL,	//FLAG
-		1.0f,	//默认深度值
-		0,	//默认模板值
-		0,	//裁剪矩形数量
-		nullptr);	//裁剪矩形指针
-
-	// Specify the buffers we are going to render to. 
-	//mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
-	//然后我们指定将要渲染的缓冲区，即指定RTV和DSV。
-	m_CommandList->OMSetRenderTargets(1,//待绑定的RTV数量
-		&rtvHandle,	//指向RTV数组的指针
-		true,	//RTV对象在堆内存中是连续存放的
-		&dsvHandle);	//指向DSV的指针
-
-	ID3D12DescriptorHeap* descriptorHeaps[] = { m_cbvHeap.Get() };
-	m_CommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
-	m_CommandList->SetGraphicsRootSignature(mRootSignature.Get());
-	m_CommandList->IASetVertexBuffers(0, 1, &mMultiGeo->VertexBufferView());
-	m_CommandList->IASetIndexBuffer(&mMultiGeo->IndexBufferView());
-	m_CommandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-	// Set address of cbv heap to the table, and be binded to pipeline
-	//设置根描述符表
-	//int objCbvIndex = 0;
-	//auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
-	//handle.Offset(objCbvIndex, m_cbv_srv_uavDescriptorSize);
-	//m_CommandList->SetGraphicsRootDescriptorTable(0, //根参数的起始索引
-	//	handle);
-	int passCbvIndex = (int)mMultiGeo->RenderItems.size() * frameResourcesCount + currFrameResourcesIndex;
-	auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
-	handle.Offset(passCbvIndex, m_cbv_srv_uavDescriptorSize);
-	m_CommandList->SetGraphicsRootDescriptorTable(1, //根参数的起始索引
-		handle);
-
-	DrawRenderItems();
-	////m_CommandList->SetGraphicsRootDescriptorTable(0, m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
-	//m_CommandList->DrawIndexedInstanced(
-	//	mMultiGeo->DrawArgs["sphere"].IndexCount,
-	//	1, 0, 0, 0);
-
-	//m_CommandList->DrawIndexedInstanced(
-	//	mMultiGeo->DrawArgs["cylinder"].IndexCount, //每个实例要绘制的索引数
-	//	1,	//实例化个数
-	//	mMultiGeo->DrawArgs["cylinder"].StartIndexLocation,	//起始索引位置
-	//	mMultiGeo->DrawArgs["cylinder"].BaseVertexLocation,	//子物体起始索引在全局索引中的位置
-	//	0);	//实例化的高级技术，暂时设置为0
-
-	// Indicate a state transition on the resource usage.
-	// 等到渲染完成，我们要将后台缓冲区的状态改成呈现状态，使其之后推到前台缓冲区显示。完了，关闭命令列表，等待传入命令队列。
-	m_CommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_SwapChainBuffer[ref_mCurrentBackBuffer].Get(),
-		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));//从渲染目标到呈现
-	// 完成命令的记录关闭命令列表 
-	ThrowIfFailed(m_CommandList->Close());
-
-	// Add the command list to the queue for execution.
-	//等CPU将命令都准备好后，需要将待执行的命令列表加入GPU的命令队列。使用的是ExecuteCommandLists函数。
-	ID3D12CommandList* commandLists[] = { m_CommandList.Get() };//声明并定义命令列表数组
-	m_CommandQueue->ExecuteCommandLists(_countof(commandLists), commandLists);//将命令从命令列表传至命令队列
-
-	// swap the back and front buffers
-	ThrowIfFailed(m_SwapChain->Present(0, 0));
-	ref_mCurrentBackBuffer = (ref_mCurrentBackBuffer + 1) % 2;
-
-	//// Wait until frame commands are complete. This waiting is
-	//// inefficient and is done for simplicity. Later we will show how to
-	//// organize our rendering code so we do not have to wait per frame.
-	//FlushCmdQueue();
-
-	// Advance the fence value to mark commands up to this fence point.
-	mCurrFrameResource->fenceCPU = ++mCurrentFence;
-	// Add an instruction to the command queue to set a new fence point.
-	// Because we are on the GPU timeline, the new fence point won’t be
-	// set until the GPU finishes processing all the commands prior to
-	// this Signal().
-	m_CommandQueue->Signal(m_fence.Get(), mCurrentFence);
-	// Note that GPU could still be working on commands from previous
-	// frames, but that is okay, because we are not touching any frame
-	// resources associated with those frames.
-}
-void QDirect3D12Widget::DrawRenderItems()
-{
-	//将智能指针数组转换成普通指针数组
-	std::vector<RenderItem*> ritems;
-	for (auto& e : mMultiGeo->RenderItems)
-		ritems.push_back(e.get());
-
-	//遍历渲染项数组
-	for (size_t i = 0; i < ritems.size(); i++)
-	{
-		auto ritem = ritems[i];
-
-		m_CommandList->IASetVertexBuffers(0, 1, &mMultiGeo->VertexBufferView());
-		m_CommandList->IASetIndexBuffer(&mMultiGeo->IndexBufferView());
-		m_CommandList->IASetPrimitiveTopology(ritem->PrimitiveType);
-
-		//设置根描述符表
-		UINT objCbvIndex = currFrameResourcesIndex * (UINT)mMultiGeo->RenderItems.size() + ritem->ObjCBIndex;
-		auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
-		handle.Offset(objCbvIndex, m_cbv_srv_uavDescriptorSize);
-		m_CommandList->SetGraphicsRootDescriptorTable(0, //根参数的起始索引
-			handle);
-
-		//绘制顶点（通过索引缓冲区绘制）
-		m_CommandList->DrawIndexedInstanced(ritem->IndexCount, //每个实例要绘制的索引数
-			1,	//实例化个数
-			ritem->StartIndexLocation,	//起始索引位置
-			ritem->BaseVertexLocation,	//子物体起始索引在全局索引中的位置
-			0);	//实例化的高级技术，暂时设置为0
-	}
-}
-#pragma endregion
-
 #pragma region QtSlot
 
 /// <summary>
@@ -726,6 +881,7 @@ void QDirect3D12Widget::onResize()
 	//resizeSwapChain(width(), height());
 	ContinueFrames();
 }
+
 #pragma endregion
 
 #pragma region HelperFuncs

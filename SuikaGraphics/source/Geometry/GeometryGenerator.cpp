@@ -185,6 +185,26 @@ GeometryGenerator::MeshData GeometryGenerator::CreateGrid(float width, float dep
 			meshData.Vertices[i * n + j].TexC.y = i * dv;
 		}
 	}
+
+	meshData.Indices32.resize(faceCount * 3);
+	// 3 indices per face
+	// Iterate over each quad and compute indices.
+	uint32 k = 0;
+	for (uint32 i = 0; i < m - 1; ++i)
+	{
+		for (uint32 j = 0; j < n - 1; ++j)
+		{
+			meshData.Indices32[k] = i * n + j;
+			meshData.Indices32[k + 1] = i * n + j + 1;
+			meshData.Indices32[k + 2] = (i + 1) * n + j;
+			meshData.Indices32[k + 3] = (i + 1) * n + j;
+			meshData.Indices32[k + 4] = i * n + j + 1;
+			meshData.Indices32[k + 5] = (i + 1) * n + j + 1;
+			k += 6; // next quad
+		}
+	}
+
+	return meshData;
 }
 
 void GeometryGenerator::BuildCylinderTopCap(
