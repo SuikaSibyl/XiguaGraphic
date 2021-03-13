@@ -186,11 +186,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="source\Geometry\GeometryGenerator.cpp" />
+    <ClCompile Include="source\Interaction\InputSystem.cpp" />
     <ClCompile Include="source\Pipeline\FrameResource.cpp" />
     <ClCompile Include="source\QDirect3D12Widget\QDirect3D12Widget.cpp" />
     <ClCompile Include="source\QtInterface\main.cpp" />
     <ClCompile Include="source\QtInterface\SuikaGraphics.cpp" />
     <ClCompile Include="source\RenderItemManagment.cpp" />
+    <ClCompile Include="source\Utility\Debug.cpp" />
     <ClCompile Include="source\Utility\GameTimer.cpp" />
     <ClCompile Include="source\Utility\MathHelper.cpp" />
     <ClCompile Include="source\Utility\Shader.cpp" />
@@ -199,14 +201,17 @@
     <QtUic Include="SuikaGraphics.ui" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Transform.h" />
+    <ClInclude Include="header\Debug.h" />
+    <ClInclude Include="header\InputSystem.h" />
+    <ClInclude Include="header\Interaction.h" />
+    <ClInclude Include="header\Singleton.h" />
+    <ClInclude Include="header\Transform.h" />
     <QtMoc Include="header\SuikaGraphics.h" />
     <ClInclude Include="header\Camera.h" />
     <ClInclude Include="header\d3dx12.h" />
     <ClInclude Include="header\FrameResources.h" />
     <ClInclude Include="header\GameTimer.h" />
     <ClInclude Include="header\GeometryGenerator.h" />
-    <ClInclude Include="header\Interaction.h" />
     <ClInclude Include="header\MathHelper.h" />
     <ClInclude Include="header\MeshGeometry.h" />
     <ClInclude Include="header\PipelineSetting.h" />

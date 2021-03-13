@@ -309,6 +309,8 @@ QDirect3D12Widget::QDirect3D12Widget(QWidget* parent)
 	// tells Qt that we'll handle all drawing and updating the widget ourselves.
 	setAttribute(Qt::WA_PaintOnScreen);
 	setAttribute(Qt::WA_NoSystemBackground);
+
+	MainCamera.m_pInputSystem = &InputSys;
 }
 
 QDirect3D12Widget::~QDirect3D12Widget() {}
@@ -1199,13 +1201,13 @@ bool QDirect3D12Widget::event(QEvent* event)
 	case QEvent::KeyPress:
 		if (!m_bRenderActive) break;
 		if (((QKeyEvent*)event)->isAutoRepeat()) break;
-		DebugLog("Key Press!");
+		InputSys.KeyPressed((QKeyEvent*)event);
 		//emit keyPressed((QKeyEvent*)event);
 		break;
 	case QEvent::KeyRelease:
 		if (!m_bRenderActive) break;
 		if (((QKeyEvent*)event)->isAutoRepeat()) break;
-		DebugLog("Key Release!");
+		InputSys.KeyReleased((QKeyEvent*)event);
 		break;
 	case QEvent::MouseMove:
 		if (!m_bRenderActive) break;
@@ -1308,13 +1310,6 @@ void QDirect3D12Widget::wheelEvent(QWheelEvent* event)
 	QWidget::wheelEvent(event);
 }
 #pragma endregion
-
-
-void QDirect3D12Widget::DebugLog(QString info)
-{
-	QTime current_time = QTime::currentTime();
-	m_pXGGWidget->AppendDebugInfo(current_time.toString() + ": " + info);
-}
 
 #pragma region QtSystemFunc
 

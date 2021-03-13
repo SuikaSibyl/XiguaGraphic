@@ -25,6 +25,8 @@
 #include <PipelineSetting.h>
 #include <FrameResources.h>
 #include <RenderItemManagment.h>
+#include <InputSystem.h>
+#include <Camera.h>
 
 using Microsoft::WRL::ComPtr;
 
@@ -83,6 +85,8 @@ protected:
     // ---------------------- Important Object ------------------------
     // ================================================================
     RenderItemManager RIManager;
+    InputSystem InputSys;
+    Camera MainCamera;
 
 private:
     // ================================================================
@@ -213,12 +217,6 @@ private:
     void CreateDSV();
     void CreateViewPortAndScissorRect();
 #pragma endregion
-
-    // ================================================================
-    // -------------------------- Qt Widget ---------------------------
-    // ================================================================
-    SuikaGraphics* m_pXGGWidget;
-    void DebugLog(QString info);
 
     // ================================================================
     // -------------------------- Qt Events ---------------------------

@@ -8,7 +8,8 @@
 #include <QCloseEvent>
 #include <QDesktopWidget>
 #include <QSplitter>
-
+#include <Singleton.h>
+#include <Debug.h>
 #include <iostream>
 
 SuikaGraphics::SuikaGraphics(QWidget *parent)
@@ -17,9 +18,12 @@ SuikaGraphics::SuikaGraphics(QWidget *parent)
     , m_WindowSize(QSize(1280, 800))
     , m_pCbxDoFrames(new QCheckBox(this))
 {
+    // Init Singlton of Debug
+    Debug& debug = Singleton<Debug>::get_instance();
+    debug.SetSuikaGraphics(this);
+
     ui->setupUi(this);
     m_pScene = ui->view;
-    m_pScene->m_pXGGWidget = this;
 
     QSplitter* splitter = new QSplitter(Qt::Vertical, 0);;
 

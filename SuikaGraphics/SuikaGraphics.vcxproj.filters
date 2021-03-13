@@ -58,6 +58,15 @@
     <Filter Include="Header Files\GameObject">
       <UniqueIdentifier>{54158228-1629-49b9-a0ac-9dcfc0e49116}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\Interaction">
+      <UniqueIdentifier>{d459037b-bba4-42d8-a461-9c6493a28d7f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\BasicModule">
+      <UniqueIdentifier>{aeb47a82-248f-487f-be52-d262be259b97}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Component">
+      <UniqueIdentifier>{45ec642b-3b28-4434-83cf-c818379b2634}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="SuikaGraphics.qrc">
@@ -98,6 +107,12 @@
     <ClCompile Include="source\QDirect3D12Widget\QDirect3D12Widget.cpp">
       <Filter>Source Files\QDirect3D12Widget</Filter>
     </ClCompile>
+    <ClCompile Include="source\Interaction\InputSystem.cpp">
+      <Filter>Source Files\Interaction</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Utility\Debug.cpp">
+      <Filter>Source Files\Utility</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="header\GameTimer.h">
@@ -118,9 +133,6 @@
     <ClInclude Include="header\d3dx12.h">
       <Filter>Header Files\Basement</Filter>
     </ClInclude>
-    <ClInclude Include="header\Interaction.h">
-      <Filter>Header Files\Interaction</Filter>
-    </ClInclude>
     <ClInclude Include="header\PipelineSetting.h">
       <Filter>Header Files\Pipeline</Filter>
     </ClInclude>
@@ -139,8 +151,20 @@
     <ClInclude Include="header\Camera.h">
       <Filter>Header Files\GameObject</Filter>
     </ClInclude>
-    <ClInclude Include="Transform.h">
-      <Filter>Header Files\GameObject</Filter>
+    <ClInclude Include="header\InputSystem.h">
+      <Filter>Header Files\Interaction</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Interaction.h">
+      <Filter>Header Files\Interaction</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Singleton.h">
+      <Filter>Header Files\BasicModule</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Debug.h">
+      <Filter>Header Files\Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Transform.h">
+      <Filter>Header Files\Component</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
