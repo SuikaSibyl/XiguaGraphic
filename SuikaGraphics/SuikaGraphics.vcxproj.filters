@@ -55,6 +55,9 @@
     <Filter Include="Source Files\Pipeline">
       <UniqueIdentifier>{bbe35db8-05ab-46dd-aeb2-aa408c202996}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\GameObject">
+      <UniqueIdentifier>{54158228-1629-49b9-a0ac-9dcfc0e49116}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="SuikaGraphics.qrc">
@@ -103,9 +106,6 @@
     <ClInclude Include="header\MathHelper.h">
       <Filter>Header Files\Utility</Filter>
     </ClInclude>
-    <ClInclude Include="header\MeshGeometry.h">
-      <Filter>Header Files\Pipeline</Filter>
-    </ClInclude>
     <ClInclude Include="header\Shader.h">
       <Filter>Header Files\Pipeline</Filter>
     </ClInclude>
@@ -132,6 +132,15 @@
     </ClInclude>
     <ClInclude Include="header\RenderItemManagment.h">
       <Filter>Header Files\Pipeline</Filter>
+    </ClInclude>
+    <ClInclude Include="header\MeshGeometry.h">
+      <Filter>Header Files\Geometry</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Camera.h">
+      <Filter>Header Files\GameObject</Filter>
+    </ClInclude>
+    <ClInclude Include="Transform.h">
+      <Filter>Header Files\GameObject</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

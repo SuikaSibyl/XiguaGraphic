@@ -6,10 +6,12 @@
 #include <QEvent>
 #include <QWheelEvent>
 #include <DirectXMath.h>
+#include <QTime>
 
 #include <Shader.h>
 #include <UploadBuffer.h>
 #include <GeometryGenerator.h>
+#include <SuikaGraphics.h>
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
@@ -19,8 +21,7 @@ constexpr int FPS_LIMIT = 120.0f;
 constexpr int MS_PER_FRAME = (int)((1.0f / FPS_LIMIT) * 1000.0f);
 
 #pragma region LIFECYCLE
-UINT vertexBufferByteSize;
-UINT indexBufferByteSize;
+
 /// <summary>
 /// LIFECYCLE :: Initialization (First Show)
 /// </summary>
@@ -38,9 +39,8 @@ bool QDirect3D12Widget::Initialize()
 
 		BuildRootSignature2();
 		BuildShadersAndInputLayout();
-		//BuildMultiGeometry();
+		BuildMultiGeometry();
 		BuildLandGeometry();
-		//BuildRenderItem();
 		BuildFrameResources();
 		//BuildDescriptorHeaps();
 		//BuildConstantBuffers();
@@ -54,7 +54,7 @@ bool QDirect3D12Widget::Initialize()
 		FlushCmdQueue();
 
 		// Releasde uploader resource
-		mMultiGeo->DisposeUploaders();
+		RIManager.DisposeAllUploaders();
 	}
 	catch (HrException& e)
 	{
@@ -111,7 +111,7 @@ void QDirect3D12Widget::Update()
 	XMStoreFloat4x4(&passConstants.viewProj, XMMatrixTranspose(viewProj));
 	mCurrFrameResource->passCB->CopyData(0, passConstants);
 
-	for (auto& e : mMultiGeo->RenderItems)
+	for (auto& e : RIManager.mAllRitems)
 	{
 		if (e->NumFramesDirty > 0)
 		{
@@ -125,6 +125,7 @@ void QDirect3D12Widget::Update()
 		}
 	}
 }
+
 /// <summary>
 /// LIFECYCLE :: Draw Stuff
 /// </summary>
@@ -171,9 +172,9 @@ void QDirect3D12Widget::Draw()
 	//ID3D12DescriptorHeap* descriptorHeaps[] = { m_cbvHeap.Get() };
 	//m_CommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 	m_CommandList->SetGraphicsRootSignature(mRootSignature.Get());
-	m_CommandList->IASetVertexBuffers(0, 1, &mMultiGeo->VertexBufferView());
-	m_CommandList->IASetIndexBuffer(&mMultiGeo->IndexBufferView());
-	m_CommandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	//m_CommandList->IASetVertexBuffers(0, 1, &mMultiGeo->VertexBufferView());
+	//m_CommandList->IASetIndexBuffer(&mMultiGeo->IndexBufferView());
+	//m_CommandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	// Set address of cbv heap to the table, and be binded to pipeline
 	//设置根描述符表
@@ -244,7 +245,7 @@ void QDirect3D12Widget::DrawRenderItems()
 {
 	//将智能指针数组转换成普通指针数组
 	std::vector<RenderItem*> ritems;
-	for (auto& e : mMultiGeo->RenderItems)
+	for (auto& e : RIManager.mAllRitems)
 		ritems.push_back(e.get());
 
 	auto objectCB = mCurrFrameResource->objCB->Resource();
@@ -255,8 +256,8 @@ void QDirect3D12Widget::DrawRenderItems()
 	{
 		auto ritem = ritems[i];
 
-		m_CommandList->IASetVertexBuffers(0, 1, &mMultiGeo->VertexBufferView());
-		m_CommandList->IASetIndexBuffer(&mMultiGeo->IndexBufferView());
+		m_CommandList->IASetVertexBuffers(0, 1, &ritem->Geo->VertexBufferView());
+		m_CommandList->IASetIndexBuffer(&ritem->Geo->IndexBufferView());
 		m_CommandList->IASetPrimitiveTopology(ritem->PrimitiveType);
 
 		//UINT objCbvIndex = currFrameResourcesIndex * (UINT)mMultiGeo->RenderItems.size() + ritem->ObjCBIndex;
@@ -287,44 +288,6 @@ void QDirect3D12Widget::DrawRenderItems()
 	}
 }
 #pragma endregion
-
-void QDirect3D12Widget::DrawRenderItems2()
-{
-	UINT objectCount = (UINT)mMultiGeo->RenderItems.size();//物体总个数（包括实例）
-	UINT objConstSize = Utils::CalcConstantBufferByteSize(sizeof(ObjectConstants));
-	UINT passConstSize = Utils::CalcConstantBufferByteSize(sizeof(PassConstants));
-	UINT objCBByteSize = objConstSize;
-	UINT passCBByteSize = passConstSize;
-
-	//将智能指针数组转换成普通指针数组
-	std::vector<RenderItem*> ritems;
-	for (auto& e : mMultiGeo->RenderItems)
-		ritems.push_back(e.get());
-
-	//遍历渲染项数组
-	for (size_t i = 0; i < ritems.size(); i++)
-	{
-		auto ritem = ritems[i];
-
-		m_CommandList->IASetVertexBuffers(0, 1, &mMultiGeo->VertexBufferView());
-		m_CommandList->IASetIndexBuffer(&mMultiGeo->IndexBufferView());
-		m_CommandList->IASetPrimitiveTopology(ritem->PrimitiveType);
-
-		//设置根描述符,将根描述符与资源绑定
-		auto objCB = mCurrFrameResource->objCB->Resource();
-		auto objCBAddress = objCB->GetGPUVirtualAddress();
-		objCBAddress += ritem->ObjCBIndex * objCBByteSize;
-		m_CommandList->SetGraphicsRootConstantBufferView(0,//寄存器槽号
-			objCBAddress);//子资源地址
-
-		//绘制顶点（通过索引缓冲区绘制）
-		m_CommandList->DrawIndexedInstanced(ritem->IndexCount, //每个实例要绘制的索引数
-			1,	//实例化个数
-			ritem->StartIndexLocation,	//起始索引位置
-			ritem->BaseVertexLocation,	//子物体起始索引在全局索引中的位置
-			0);	//实例化的高级技术，暂时设置为0
-	}
-}
 
 QDirect3D12Widget::QDirect3D12Widget(QWidget* parent)
 	: QWidget(parent)
@@ -397,7 +360,7 @@ void QDirect3D12Widget::ContinueFrames()
 
 void QDirect3D12Widget::BuildDescriptorHeaps()
 {
-	UINT objectCount = (UINT)mMultiGeo->RenderItems.size();//物体总个数（包括实例）
+	UINT objectCount = (UINT)RIManager.mAllRitems.size();//物体总个数（包括实例）
 
 	// 创建Descriptor heap, 并创建CBV
 	// 首先创建cbv堆
@@ -413,7 +376,7 @@ void QDirect3D12Widget::BuildConstantBuffers()
 {
 	// Create Object CBV
 	// ----------------------
-	UINT objectCount = (UINT)mMultiGeo->RenderItems.size();//物体总个数（包括实例）
+	UINT objectCount = (UINT)RIManager.mAllRitems.size();//物体总个数（包括实例）
 	UINT objCBByteSize = Utils::CalcConstantBufferByteSize(sizeof(ObjectConstants));
 	//D3D12_GPU_VIRTUAL_ADDRESS objCbAddress = mObjectCB->Resource()->GetGPUVirtualAddress();
 	//// Offset to the ith object constant buffer in the buffer.
@@ -515,18 +478,8 @@ void QDirect3D12Widget::BuildLandGeometry() {
 
 	MeshGeometryHelper helper(this);
 	helper.PushSubmeshGeometry("grid", vertices, indices);
-	std::unique_ptr<MeshGeometry> geo = helper.CreateMeshGeometry("landGeo");
-
-	mMultiGeo = std::move(geo);
-
-	auto gridRitem = std::make_unique<RenderItem>();
-	gridRitem->World = MathHelper::Identity4x4();
-	gridRitem->ObjCBIndex = 0;//grid常量数据（world矩阵）在objConstantBuffer索引0上
-	gridRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	gridRitem->IndexCount = mMultiGeo->DrawArgs["grid"].IndexCount;
-	gridRitem->BaseVertexLocation = mMultiGeo->DrawArgs["grid"].BaseVertexLocation;
-	gridRitem->StartIndexLocation = mMultiGeo->DrawArgs["grid"].StartIndexLocation;
-	mMultiGeo->RenderItems.push_back(std::move(gridRitem));
+	RIManager.AddGeometry("landGeo", helper.CreateMeshGeometry("landGeo"));
+	RIManager.AddRitem("landGeo", "grid");
 }
 
 void QDirect3D12Widget::BuildRootSignature()
@@ -628,63 +581,25 @@ void QDirect3D12Widget::BuildMultiGeometry()
 	ProceduralGeometry::GeometryGenerator::MeshData sphere = geoGen.CreateGeosphere(0.5f, 4);
 	ProceduralGeometry::GeometryGenerator::MeshData cylinder = geoGen.CreateCylinder(0.5f, 0.3f, 3.0f, 20, 20);
 
-	//计算单个几何体顶点在总顶点数组中的偏移量,顺序为：box、grid、sphere、cylinder
-	UINT sphereVertexOffset = 0;
-	UINT cylinderVertexOffset = (UINT)sphere.Vertices.size() + sphereVertexOffset;
-
-	//计算单个几何体索引在总索引数组中的偏移量,顺序为：box、grid、sphere、cylinder
-	UINT sphereIndexOffset = 0;
-	UINT cylinderIndexOffset = (UINT)sphere.Indices32.size() + sphereIndexOffset;
-
-
-	Geometry::SubmeshGeometry sphereSubmesh;
-	sphereSubmesh.IndexCount = (UINT)sphere.Indices32.size();
-	sphereSubmesh.BaseVertexLocation = sphereVertexOffset;
-	sphereSubmesh.StartIndexLocation = sphereIndexOffset;
-
-
-	Geometry::SubmeshGeometry cylinderSubmesh;
-	cylinderSubmesh.IndexCount = (UINT)cylinder.Indices32.size();
-	cylinderSubmesh.BaseVertexLocation = cylinderVertexOffset;
-	cylinderSubmesh.StartIndexLocation = cylinderIndexOffset;
-
-	size_t totalVertexCount = sphere.Vertices.size() +cylinder.Vertices.size();
-	std::vector<Geometry::Vertex> vertices(totalVertexCount);	//给定顶点数组大小
-	int k = 0;
-	for (int i = 0; i < sphere.Vertices.size(); i++, k++)
+	std::vector<Geometry::Vertex> sphere_vertices(sphere.Vertices.size());
+	for (int i = 0; i < sphere.Vertices.size(); i++)
 	{
-		vertices[k].Pos = sphere.Vertices[i].Position;
-		vertices[k].Color = DirectX::XMFLOAT4(DirectX::Colors::Green);
+		sphere_vertices[i].Pos = sphere.Vertices[i].Position;
+		sphere_vertices[i].Color = DirectX::XMFLOAT4(DirectX::Colors::Green);
 	}
-	for (int i = 0; i < cylinder.Vertices.size(); i++, k++)
+	std::vector<Geometry::Vertex> cylinder_vertices(cylinder.Vertices.size());
+	for (int i = 0; i < cylinder.Vertices.size(); i++)
 	{
-		vertices[k].Pos = cylinder.Vertices[i].Position;
-		vertices[k].Color = DirectX::XMFLOAT4(DirectX::Colors::Blue);
+		cylinder_vertices[i].Pos = cylinder.Vertices[i].Position;
+		cylinder_vertices[i].Color = DirectX::XMFLOAT4(DirectX::Colors::Blue);
 	}
 
-	std::vector<std::uint16_t> indices;
-	indices.insert(indices.end(), sphere.GetIndices16().begin(), sphere.GetIndices16().end());
-	indices.insert(indices.end(), cylinder.GetIndices16().begin(), cylinder.GetIndices16().end());
+	MeshGeometryHelper helper(this);
+	helper.PushSubmeshGeometry("sphere", sphere_vertices, sphere.GetIndices16());
+	helper.PushSubmeshGeometry("cylinder", cylinder_vertices, cylinder.GetIndices16());
+	RIManager.AddGeometry("pillar", helper.CreateMeshGeometry("pillar"));
 
-	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Geometry::Vertex);
-	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
-
-	mMultiGeo = std::make_unique<Geometry::MeshGeometry>();
-	mMultiGeo->Name = "boxGeo";
-
-	ThrowIfFailed(D3DCreateBlob(vbByteSize, &mMultiGeo->VertexBufferCPU));	//创建顶点数据内存空间
-	ThrowIfFailed(D3DCreateBlob(ibByteSize, &mMultiGeo->IndexBufferCPU));	//创建索引数据内存空间
-	CopyMemory(mMultiGeo->VertexBufferCPU->GetBufferPointer(), vertices.data(), vbByteSize);
-	CopyMemory(mMultiGeo->IndexBufferCPU->GetBufferPointer(), indices.data(), ibByteSize);
-	mMultiGeo->VertexBufferGPU = CreateDefaultBuffer(vbByteSize, vertices.data(), mMultiGeo->VertexBufferUploader);
-	mMultiGeo->IndexBufferGPU = CreateDefaultBuffer(ibByteSize, indices.data(), mMultiGeo->IndexBufferUploader);
-	mMultiGeo->VertexByteStride = sizeof(Geometry::Vertex);
-	mMultiGeo->VertexBufferByteSize = vbByteSize;
-	mMultiGeo->IndexFormat = DXGI_FORMAT_R16_UINT;
-	mMultiGeo->IndexBufferByteSize = ibByteSize;
-
-	mMultiGeo->DrawArgs["sphere"] = sphereSubmesh;
-	mMultiGeo->DrawArgs["cylinder"] = cylinderSubmesh;
+	BuildRenderItem();
 }
 
 void QDirect3D12Widget::BuildRenderItem()
@@ -693,49 +608,24 @@ void QDirect3D12Widget::BuildRenderItem()
 	//将圆柱和圆的实例模型存入渲染项中
 	for (int i = 0; i < 5; i++)
 	{
-		auto leftCylinderRitem = std::make_unique<RenderItem>();
-		auto rightCylinderRitem = std::make_unique<RenderItem>();
-		auto leftSphereRitem = std::make_unique<RenderItem>();
-		auto rightSphereRitem = std::make_unique<RenderItem>();
+		RenderItem* leftCylinderRitem = RIManager.AddRitem("pillar", "cylinder", RenderQueue::Opaque);
+		RenderItem* rightCylinderRitem = RIManager.AddRitem("pillar", "cylinder", RenderQueue::Opaque);
+		RenderItem* leftSphereRitem = RIManager.AddRitem("pillar", "sphere", RenderQueue::Opaque);
+		RenderItem* rightSphereRitem = RIManager.AddRitem("pillar", "sphere", RenderQueue::Opaque);
 
 		XMMATRIX leftCylWorld = XMMatrixTranslation(-5.0f, 1.5f, -10.0f + i * 5.0f);
 		XMMATRIX rightCylWorld = XMMatrixTranslation(+5.0f, 1.5f, -10.0f + i * 5.0f);
 		XMMATRIX leftSphereWorld = XMMatrixTranslation(-5.0f, 3.5f, -10.0f + i * 5.0f);
 		XMMATRIX rightSphereWorld = XMMatrixTranslation(+5.0f, 3.5f, -10.0f + i * 5.0f);
+
 		//左边5个圆柱
 		XMStoreFloat4x4(&(leftCylinderRitem->World), leftCylWorld);
-		//此处的索引随着循环不断加1（注意：这里是先赋值再++）
-		leftCylinderRitem->ObjCBIndex = fllowObjCBIndex++;
-		leftCylinderRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-		leftCylinderRitem->IndexCount = mMultiGeo->DrawArgs["cylinder"].IndexCount;
-		leftCylinderRitem->BaseVertexLocation = mMultiGeo->DrawArgs["cylinder"].BaseVertexLocation;
-		leftCylinderRitem->StartIndexLocation = mMultiGeo->DrawArgs["cylinder"].StartIndexLocation;
 		//右边5个圆柱
 		XMStoreFloat4x4(&(rightCylinderRitem->World), rightCylWorld);
-		rightCylinderRitem->ObjCBIndex = fllowObjCBIndex++;
-		rightCylinderRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-		rightCylinderRitem->IndexCount = mMultiGeo->DrawArgs["cylinder"].IndexCount;
-		rightCylinderRitem->BaseVertexLocation = mMultiGeo->DrawArgs["cylinder"].BaseVertexLocation;
-		rightCylinderRitem->StartIndexLocation = mMultiGeo->DrawArgs["cylinder"].StartIndexLocation;
 		//左边5个球
 		XMStoreFloat4x4(&(leftSphereRitem->World), leftSphereWorld);
-		leftSphereRitem->ObjCBIndex = fllowObjCBIndex++;
-		leftSphereRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-		leftSphereRitem->IndexCount = mMultiGeo->DrawArgs["sphere"].IndexCount;
-		leftSphereRitem->BaseVertexLocation = mMultiGeo->DrawArgs["sphere"].BaseVertexLocation;
-		leftSphereRitem->StartIndexLocation = mMultiGeo->DrawArgs["sphere"].StartIndexLocation;
 		//右边5个球
 		XMStoreFloat4x4(&(rightSphereRitem->World), rightSphereWorld);
-		rightSphereRitem->ObjCBIndex = fllowObjCBIndex++;
-		rightSphereRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-		rightSphereRitem->IndexCount = mMultiGeo->DrawArgs["sphere"].IndexCount;
-		rightSphereRitem->BaseVertexLocation = mMultiGeo->DrawArgs["sphere"].BaseVertexLocation;
-		rightSphereRitem->StartIndexLocation = mMultiGeo->DrawArgs["sphere"].StartIndexLocation;
-
-		mMultiGeo->RenderItems.push_back(std::move(leftCylinderRitem));
-		mMultiGeo->RenderItems.push_back(std::move(rightCylinderRitem));
-		mMultiGeo->RenderItems.push_back(std::move(leftSphereRitem));
-		mMultiGeo->RenderItems.push_back(std::move(rightSphereRitem));
 	}
 }
 void QDirect3D12Widget::BuildBoxGeometry()
@@ -843,7 +733,7 @@ void QDirect3D12Widget::BuildFrameResources()
 		FrameResourcesArray.push_back(std::make_unique<FrameResource>(
 			m_d3dDevice.Get(),
 			1,     //passCount
-			(UINT)mMultiGeo->RenderItems.size()));	//objCount
+			(UINT)RIManager.mAllRitems.size()));	//objCount
 	}
 }
 
@@ -1308,7 +1198,14 @@ bool QDirect3D12Widget::event(QEvent* event)
 		break;
 	case QEvent::KeyPress:
 		if (!m_bRenderActive) break;
-		emit keyPressed((QKeyEvent*)event);
+		if (((QKeyEvent*)event)->isAutoRepeat()) break;
+		DebugLog("Key Press!");
+		//emit keyPressed((QKeyEvent*)event);
+		break;
+	case QEvent::KeyRelease:
+		if (!m_bRenderActive) break;
+		if (((QKeyEvent*)event)->isAutoRepeat()) break;
+		DebugLog("Key Release!");
 		break;
 	case QEvent::MouseMove:
 		if (!m_bRenderActive) break;
@@ -1411,6 +1308,13 @@ void QDirect3D12Widget::wheelEvent(QWheelEvent* event)
 	QWidget::wheelEvent(event);
 }
 #pragma endregion
+
+
+void QDirect3D12Widget::DebugLog(QString info)
+{
+	QTime current_time = QTime::currentTime();
+	m_pXGGWidget->AppendDebugInfo(current_time.toString() + ": " + info);
+}
 
 #pragma region QtSystemFunc
 

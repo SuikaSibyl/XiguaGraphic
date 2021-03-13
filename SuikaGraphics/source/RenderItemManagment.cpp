@@ -1,6 +1,35 @@
 #include <RenderItemManagment.h>
 #include <QDirect3D12Widget.h>
 
+
+RenderItem* RenderItemManager::AddRitem(string geo_name, string sub_name, RenderQueue renderQ)
+{
+	std::unique_ptr<RenderItem> ritem = std::make_unique<RenderItem>();
+	ritem->World = MathHelper::Identity4x4();
+	ritem->ObjCBIndex = mAllRitems.size();
+	ritem->Geo = geometries[geo_name].get();
+	ritem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	ritem->IndexCount = geometries[geo_name]->DrawArgs[sub_name].IndexCount;
+	ritem->BaseVertexLocation = geometries[geo_name]->DrawArgs[sub_name].BaseVertexLocation;
+	ritem->StartIndexLocation = geometries[geo_name]->DrawArgs[sub_name].StartIndexLocation;
+
+	switch (renderQ)
+	{
+	case Opaque:
+		mOpaqueRitems.push_back(ritem.get());
+		break;
+	case Transparent:
+		mTransparentRitems.push_back(ritem.get());
+		break;
+	default:
+		break;
+	}
+
+	mAllRitems.push_back(std::move(ritem));
+
+	return mAllRitems.back().get();
+}
+
 std::unique_ptr<MeshGeometry> MeshGeometryHelper::CreateMeshGeometry(string name)
 {
 	std::unique_ptr<MeshGeometry> geometry = std::make_unique<MeshGeometry>();
@@ -44,15 +73,6 @@ std::unique_ptr<MeshGeometry> MeshGeometryHelper::CreateMeshGeometry(string name
 	geometry->VertexBufferByteSize = vbByteSize;
 	geometry->IndexFormat = DXGI_FORMAT_R16_UINT;
 	geometry->IndexBufferByteSize = ibByteSize;
-
-	//auto gridRitem = std::make_unique<RenderItem>();
-	//gridRitem->World = MathHelper::Identity4x4();
-	//gridRitem->ObjCBIndex = 0;
-	//gridRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	//gridRitem->IndexCount = mMultiGeo->DrawArgs["grid"].IndexCount;
-	//gridRitem->BaseVertexLocation = mMultiGeo->DrawArgs["grid"].BaseVertexLocation;
-	//gridRitem->StartIndexLocation = mMultiGeo->DrawArgs["grid"].StartIndexLocation;
-	//mMultiGeo->RenderItems.push_back(std::move(gridRitem));
 
 	return std::move(geometry);
 }

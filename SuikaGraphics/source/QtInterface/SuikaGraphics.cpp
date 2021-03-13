@@ -7,6 +7,7 @@
 #include <QMessageBox>
 #include <QCloseEvent>
 #include <QDesktopWidget>
+#include <QSplitter>
 
 #include <iostream>
 
@@ -18,8 +19,19 @@ SuikaGraphics::SuikaGraphics(QWidget *parent)
 {
     ui->setupUi(this);
     m_pScene = ui->view;
-    setCentralWidget(m_pScene);
+    m_pScene->m_pXGGWidget = this;
 
+    QSplitter* splitter = new QSplitter(Qt::Vertical, 0);;
+
+    splitter->addWidget(ui->view);
+    splitter->addWidget(ui->debugview);
+    splitter->setStretchFactor(0, 5);
+    splitter->setStretchFactor(1, 1);
+
+    setCentralWidget(splitter);
+
+    m_pDebugTxt = ui->debugTxt;
+    
     // Create ProgressBar
     progressBar1 = new QProgressBar;
     progressBar1->setMaximumWidth(200);
@@ -48,6 +60,15 @@ SuikaGraphics::SuikaGraphics(QWidget *parent)
 }
 
 SuikaGraphics::~SuikaGraphics() = default;
+
+/// <summary>
+/// Add info to the debug textbrowser
+/// </summary>
+/// <param name=""></param>
+void SuikaGraphics::AppendDebugInfo(QString info)
+{
+    m_pDebugTxt->append(info);
+}
 
 /// <summary>
 /// Set the window size to m_WindowSize

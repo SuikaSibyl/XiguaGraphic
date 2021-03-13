@@ -9,6 +9,7 @@
 
 #include <QWidget>
 #include <QTimer>
+#include <QString>
 
 #include <wrl.h>
 #include <d3d12.h>
@@ -27,11 +28,14 @@
 
 using Microsoft::WRL::ComPtr;
 
+class SuikaGraphics;
+
 class QDirect3D12Widget : public QWidget
 {
     Q_OBJECT
 
 public:
+    friend class SuikaGraphics;
     friend class MeshGeometryHelper;
 
 public:
@@ -74,6 +78,11 @@ protected:
     // Render Active/Inavtive Get & Set
     bool renderActive() const { return m_bRenderActive; }
     void setRenderActive(bool active) { m_bRenderActive = active; }
+
+    // ================================================================
+    // ---------------------- Important Object ------------------------
+    // ================================================================
+    RenderItemManager RIManager;
 
 private:
     // ================================================================
@@ -206,6 +215,12 @@ private:
 #pragma endregion
 
     // ================================================================
+    // -------------------------- Qt Widget ---------------------------
+    // ================================================================
+    SuikaGraphics* m_pXGGWidget;
+    void DebugLog(QString info);
+
+    // ================================================================
     // -------------------------- Qt Events ---------------------------
     // ================================================================
     bool            event(QEvent* event) override;
@@ -233,14 +248,15 @@ private slots:
     // ------------------------- Qt Signals ---------------------------
     // ================================================================
 signals:
+    // init signal
     void deviceInitialized(bool success);
-
+    // other signal
     void eventHandled();
     void widgetResized();
-
+    // pipeline signal
     void ticked();
     void rendered(ID3D12GraphicsCommandList* cl);
-
+    // Input signal
     void keyPressed(QKeyEvent*);
     void mouseMoved(QMouseEvent*);
     void mouseClicked(QMouseEvent*);

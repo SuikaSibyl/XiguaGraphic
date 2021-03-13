@@ -4,6 +4,9 @@
 #include <QCheckBox>
 #include <QProgressBar>
 #include <qlabel.h>
+#include <QTextBrowser>
+#include <QString>
+#include <string>
 
 #include "ui_SuikaGraphics.h"
 #include <QDirect3D12Widget.h>
@@ -11,6 +14,9 @@
 class SuikaGraphics : public QMainWindow
 {
     Q_OBJECT
+
+public:
+    void AppendDebugInfo(QString info);
 
 public:
     SuikaGraphics(QWidget *parent = Q_NULLPTR);
@@ -40,4 +46,5 @@ private:
     QDirect3D12Widget*  m_pScene;
     QSize               m_WindowSize;
     QCheckBox*          m_pCbxDoFrames;
+    QTextBrowser*       m_pDebugTxt;
 };
