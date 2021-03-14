@@ -1,5 +1,6 @@
 #include "GameTimer.h"
 #include <windows.h>
+#include <Singleton.h>
 
 GameTimer::GameTimer() :
 	mSecondsPerCount(0.0),
@@ -51,7 +52,7 @@ float GameTimer::TotalTime()const
 	}
 }
 
-float GameTimer::DeltaTime()const
+float GameTimer::GetDeltaTime()const
 {
 	return (float)mDeltaTime;
 }
@@ -121,4 +122,9 @@ void GameTimer::Tick()
 	{
 		mDeltaTime = 0.0;
 	}
+}
+
+float GameTimer::DeltaTime()
+{
+	return Singleton<GameTimer>::get_instance().GetDeltaTime();
 }

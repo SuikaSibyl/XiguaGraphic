@@ -5,8 +5,10 @@ class GameTimer
 public:
 	GameTimer();
 
+	static float DeltaTime();
+
 	float TotalTime()const; // in seconds
-	float DeltaTime()const; // in seconds
+	float GetDeltaTime()const; // in seconds
 
 	void Reset(); // Call before message loop.
 	void Start(); // Call when unpaused.
@@ -25,4 +27,3 @@ private:
 
 	bool mStopped;
 };
-

@@ -113,6 +113,9 @@
     <ClCompile Include="source\Utility\Debug.cpp">
       <Filter>Source Files\Utility</Filter>
     </ClCompile>
+    <ClCompile Include="source\GameObject\Camera.cpp">
+      <Filter>Source Files\Utility</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="header\GameTimer.h">
@@ -148,9 +151,6 @@
     <ClInclude Include="header\MeshGeometry.h">
       <Filter>Header Files\Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="header\Camera.h">
-      <Filter>Header Files\GameObject</Filter>
-    </ClInclude>
     <ClInclude Include="header\InputSystem.h">
       <Filter>Header Files\Interaction</Filter>
     </ClInclude>
@@ -164,6 +164,15 @@
       <Filter>Header Files\Utility</Filter>
     </ClInclude>
     <ClInclude Include="header\Transform.h">
+      <Filter>Header Files\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Delegate.h">
+      <Filter>Header Files\BasicModule</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Camera.h">
+      <Filter>Header Files\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component.h">
       <Filter>Header Files\Component</Filter>
     </ClInclude>
   </ItemGroup>

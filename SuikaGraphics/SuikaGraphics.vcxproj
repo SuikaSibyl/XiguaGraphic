@@ -185,6 +185,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="source\GameObject\Camera.cpp" />
     <ClCompile Include="source\Geometry\GeometryGenerator.cpp" />
     <ClCompile Include="source\Interaction\InputSystem.cpp" />
     <ClCompile Include="source\Pipeline\FrameResource.cpp" />
@@ -201,7 +202,9 @@
     <QtUic Include="SuikaGraphics.ui" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Component.h" />
     <ClInclude Include="header\Debug.h" />
+    <ClInclude Include="header\Delegate.h" />
     <ClInclude Include="header\InputSystem.h" />
     <ClInclude Include="header\Interaction.h" />
     <ClInclude Include="header\Singleton.h" />

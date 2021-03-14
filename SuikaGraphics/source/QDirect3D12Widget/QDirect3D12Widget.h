@@ -128,13 +128,6 @@ private:
     DirectX::XMFLOAT4X4 mView = MathHelper::Identity4x4();
     DirectX::XMFLOAT4X4 mProj = MathHelper::Identity4x4();
 
-    int mLastMousePosx = 0;
-    int mLastMousePosy = 0;
-
-    float mTheta = 1.5f * DirectX::XM_PI;
-    float mPhi = DirectX::XM_PIDIV4;
-    float mRadius = 5.0f;
-
     int currFrameResourcesIndex = 0;
     void BuildFrameResources();
     std::vector<std::unique_ptr<FrameResource>> FrameResourcesArray;
@@ -146,7 +139,7 @@ private:
     // ------------------ Private Important Object --------------------
     // ================================================================
     QTimer m_qTimer;        // Regularly call update
-    GameTimer m_tGameTimer; // Manage time in system
+    GameTimer& m_tGameTimer; // Manage time in system
 
     // ================================================================
     // ----------------- Private Helper Function ----------------------

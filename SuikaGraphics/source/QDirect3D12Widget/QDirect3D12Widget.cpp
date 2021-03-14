@@ -12,6 +12,7 @@
 #include <UploadBuffer.h>
 #include <GeometryGenerator.h>
 #include <SuikaGraphics.h>
+#include <Singleton.h>
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
@@ -29,7 +30,6 @@ bool QDirect3D12Widget::Initialize()
 {
 	// First resize, will calc mProj
 	onResize();
-
 	// Initialize Direct3D
 	InitDirect3D();
 
@@ -92,16 +92,8 @@ void QDirect3D12Widget::Update()
 	ObjectConstants objConstants;
 	PassConstants passConstants;
 
-	//Convert Spherical to Cartesian coordinates. 
-	float x = mRadius * sinf(mPhi) * cosf(mTheta);
-	float z = mRadius * sinf(mPhi) * sinf(mTheta);
-	float y = mRadius * cosf(mPhi);
-	// Build the view matrix. 
-
-	XMVECTOR pos = XMVectorSet(x, y, z, 1.0f);
-	XMVECTOR target = XMVectorZero();
-	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-	XMMATRIX view = XMMatrixLookAtLH(pos, target, up);
+	MainCamera.Update();
+	XMMATRIX view = MainCamera.GetViewMatrix();
 	XMStoreFloat4x4(&mView, view);
 	XMMATRIX proj = XMLoadFloat4x4(&mProj);
 
@@ -295,6 +287,7 @@ QDirect3D12Widget::QDirect3D12Widget(QWidget* parent)
 	, m_bDeviceInitialized(false)
 	, m_bRenderActive(false)
 	, m_bStarted(false)
+	, m_tGameTimer(Singleton<GameTimer>::get_instance())
 {
 	// Set palette
 	QPalette pal = palette();
@@ -311,6 +304,9 @@ QDirect3D12Widget::QDirect3D12Widget(QWidget* parent)
 	setAttribute(Qt::WA_NoSystemBackground);
 
 	MainCamera.m_pInputSystem = &InputSys;
+	MainCamera.m_pD3dWidget = this;
+	MainCamera.Init();
+	MainCamera.SetMouseModeFocus();
 }
 
 QDirect3D12Widget::~QDirect3D12Widget() {}
@@ -890,28 +886,12 @@ ComPtr<ID3D12Resource> QDirect3D12Widget::CreateDefaultBuffer
 
 void QDirect3D12Widget::OnMouseMove(QMouseEvent* event)
 {
-	int x = event->pos().x();
-	int y = event->pos().y();
-
-	float dx = XMConvertToRadians(0.25f * static_cast<float> (x - mLastMousePosx));
-	float dy = XMConvertToRadians(0.25f * static_cast<float> (y - mLastMousePosy));
-
-	mTheta -= dx;
-	mPhi -= dy;
-
-	mPhi = MathHelper::Clamp(mPhi, 0.1f, MathHelper::Pi - 0.1f);
-	// 
-	mLastMousePosx = x;
-	mLastMousePosy = y;
+	MainCamera.OnMouseMove(event);
 }
 
 void QDirect3D12Widget::OnMousePressed(QMouseEvent* event)
 {
-	int x = event->pos().x();
-	int y = event->pos().y();
-
-	mLastMousePosx = x;
-	mLastMousePosy = y;
+	MainCamera.OnMousePressed(event);
 }
 
 void QDirect3D12Widget::OnMouseReleased(QMouseEvent* event)
@@ -1132,7 +1112,7 @@ void QDirect3D12Widget::CreateDSV()
 		IID_PPV_ARGS(&m_DepthStencilBuffer)));	//返回深度模板资源
 
 	m_d3dDevice->CreateDepthStencilView(m_DepthStencilBuffer.Get(),
-		nullptr,	//D3D12_DEPTH_STENCIL_VIEW_DESC类型指针，可填&dsvDesc（见上注释代码），
+		nullptr,	//D3D12_DEPTH_STENCIL_VIEW_DESC类型指针，可填&dsvDesc
 					//由于在创建深度模板资源时已经定义深度模板数据属性，所以这里可以指定为空指针
 		m_dsvHeap->GetCPUDescriptorHandleForHeapStart());	//DSV句柄
 
@@ -1142,20 +1122,23 @@ void QDirect3D12Widget::CreateDSV()
 			D3D12_RESOURCE_STATE_COMMON,	//转换前状态（创建时的状态，即CreateCommittedResource函数中定义的状态）
 			D3D12_RESOURCE_STATE_DEPTH_WRITE));
 }
+
 /// <summary>
 /// Initialize:: 11 Create the Depth/Stencil Buffer & View
 /// </summary>
 void QDirect3D12Widget::CreateViewPortAndScissorRect()
 {
-	//视口设置
+	// Set viewport
+	// 视口设置
 	viewPort.TopLeftX = 0;
 	viewPort.TopLeftY = 0;
 	viewPort.Width = width();
 	viewPort.Height = height();
 	viewPort.MaxDepth = 1.0f;
 	viewPort.MinDepth = 0.0f;
-	//裁剪矩形设置（矩形外的像素都将被剔除）
-	//前两个为左上点坐标，后两个为右下点坐标
+	// Set scissor rectangle
+	// 裁剪矩形设置（矩形外的像素都将被剔除）
+	// 前两个为左上点坐标，后两个为右下点坐标
 	scissorRect.left = 0;
 	scissorRect.top = 0;
 	scissorRect.right = width();

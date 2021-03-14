@@ -28,6 +28,7 @@
 #include "d3dx12.h"
 #include <MathHelper.h>
 #include <iostream>
+#include <Delegate.h>
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
