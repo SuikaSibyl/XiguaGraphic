@@ -13,6 +13,7 @@
 #include <GeometryGenerator.h>
 #include <SuikaGraphics.h>
 #include <Singleton.h>
+#include <Material.h>
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
@@ -39,9 +40,19 @@ bool QDirect3D12Widget::Initialize()
 
 		BuildRootSignature2();
 		BuildShadersAndInputLayout();
+
+		// Material
+		BuildMaterial();
+		// Geometry Things
 		BuildMultiGeometry();
 		BuildLandGeometry();
+		BuildLakeGeometry();
+		BuildLights();
+		
+		// Init Frame Resource
+		// must after all render items pushed;
 		BuildFrameResources();
+
 		//BuildDescriptorHeaps();
 		//BuildConstantBuffers();
 		BuildPSO();
@@ -68,6 +79,10 @@ bool QDirect3D12Widget::Initialize()
 	m_tGameTimer.Reset();
 
 	return true;
+}
+
+float GetWave(float x, float z, float t) {
+	return 0.04f * (z * sinf(0.05f * x * t) + x * cosf(0.03f * z * t));
 }
 
 /// <summary>
@@ -99,10 +114,12 @@ void QDirect3D12Widget::Update()
 
 	XMMATRIX viewProj = view * proj;
 	// Update the constant buffer with the latest worldViewProj matrix.
-	passConstants.gTime = m_tGameTimer.TotalTime();
+	passConstants.gTime = m_tGameTimer.GetTotalTime();
+	passConstants.light[0] = *RIManager.mLights["mainLit"];
 	XMStoreFloat4x4(&passConstants.viewProj, XMMatrixTranspose(viewProj));
 	mCurrFrameResource->passCB->CopyData(0, passConstants);
 
+	// Update object Index
 	for (auto& e : RIManager.mAllRitems)
 	{
 		if (e->NumFramesDirty > 0)
@@ -116,6 +133,42 @@ void QDirect3D12Widget::Update()
 			e->NumFramesDirty--;
 		}
 	}
+
+	// Update Material
+	UploadBuffer<MaterialConstants>* currMaterialCB = mCurrFrameResource -> materialCB.get();
+	for (auto& e : RIManager.mMaterials)
+	{
+		// Only update the cbuffer data if the constants have changed.If
+		// the cbuffer data changes, it needs to be updated for each
+		// FrameResource
+		Material* mat = e.second.get();
+		if (mat->NumFramesDirty > 0)
+		{
+			XMMATRIX matTransform = XMLoadFloat4x4(&mat -> MatTransform);
+			MaterialConstants matConstants;
+			matConstants.DiffuseAlbedo = mat->DiffuseAlbedo;
+			matConstants.FresnelR0 = mat->FresnelR0;
+			matConstants.Roughness = mat->Roughness;
+
+			currMaterialCB->CopyData(mat->MatCBIndex, matConstants);
+			// Next FrameResource need to be updated too.
+			mat->NumFramesDirty--;
+		}
+	}
+
+	// Update Wave
+	auto currWavesVB = mCurrFrameResource -> dynamicVB.get();
+	vector<Vertex>& vertices = wave->helper.GetVertices();
+	for (int i = 0; i < vertex_num; i++)
+	{
+		vertices[i].Pos.y = GetWave(vertices[i].Pos.x, vertices[i].Pos.z, GameTimer::TotalTime());
+	}
+	wave->helper.CalcNormal();
+	for (int i = 0; i < vertex_num; i++)
+	{
+		currWavesVB->CopyData(i, vertices[i]);
+	}
+	RIManager.geometries["lakeGeo"]->VertexBufferGPU = currWavesVB -> Resource();
 }
 
 /// <summary>
@@ -164,42 +217,17 @@ void QDirect3D12Widget::Draw()
 	//ID3D12DescriptorHeap* descriptorHeaps[] = { m_cbvHeap.Get() };
 	//m_CommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 	m_CommandList->SetGraphicsRootSignature(mRootSignature.Get());
-	//m_CommandList->IASetVertexBuffers(0, 1, &mMultiGeo->VertexBufferView());
-	//m_CommandList->IASetIndexBuffer(&mMultiGeo->IndexBufferView());
-	//m_CommandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-	// Set address of cbv heap to the table, and be binded to pipeline
-	//设置根描述符表
-	//int objCbvIndex = 0;
-	//auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
-	//handle.Offset(objCbvIndex, m_cbv_srv_uavDescriptorSize);
-	//m_CommandList->SetGraphicsRootDescriptorTable(0, //根参数的起始索引
-	//	handle);
-
-
-	//int passCbvIndex = (int)mMultiGeo->RenderItems.size() * frameResourcesCount + currFrameResourcesIndex;
-	//auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
-	//handle.Offset(passCbvIndex, m_cbv_srv_uavDescriptorSize);
-	//m_CommandList->SetGraphicsRootDescriptorTable(1, //根参数的起始索引
-	//	handle);
 
 	UINT passConstSize = Utils::CalcConstantBufferByteSize(sizeof(PassConstants));
 	auto passCB = mCurrFrameResource->passCB-> Resource();
 	m_CommandList->SetGraphicsRootConstantBufferView(1, passCB-> GetGPUVirtualAddress());
+	// Deprecated: use descriptor table
+	//		int passCbvIndex = (int)mMultiGeo->RenderItems.size() * frameResourcesCount + currFrameResourcesIndex;
+	//		auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
+	//		handle.Offset(passCbvIndex, m_cbv_srv_uavDescriptorSize);
+	//		m_CommandList->SetGraphicsRootDescriptorTable(1, //根参数的起始索引 handle);
 
 	DrawRenderItems();
-
-	////m_CommandList->SetGraphicsRootDescriptorTable(0, m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
-	//m_CommandList->DrawIndexedInstanced(
-	//	mMultiGeo->DrawArgs["sphere"].IndexCount,
-	//	1, 0, 0, 0);
-
-	//m_CommandList->DrawIndexedInstanced(
-	//	mMultiGeo->DrawArgs["cylinder"].IndexCount, //每个实例要绘制的索引数
-	//	1,	//实例化个数
-	//	mMultiGeo->DrawArgs["cylinder"].StartIndexLocation,	//起始索引位置
-	//	mMultiGeo->DrawArgs["cylinder"].BaseVertexLocation,	//子物体起始索引在全局索引中的位置
-	//	0);	//实例化的高级技术，暂时设置为0
 
 	// Indicate a state transition on the resource usage.
 	// 等到渲染完成，我们要将后台缓冲区的状态改成呈现状态，使其之后推到前台缓冲区显示。完了，关闭命令列表，等待传入命令队列。
@@ -242,6 +270,7 @@ void QDirect3D12Widget::DrawRenderItems()
 
 	auto objectCB = mCurrFrameResource->objCB->Resource();
 	INT objCBByteSize = Utils::CalcConstantBufferByteSize(sizeof(ObjectConstants));
+	INT matCBByteSize = Utils::CalcConstantBufferByteSize(sizeof(MaterialConstants));
 
 	//遍历渲染项数组
 	for (size_t i = 0; i < ritems.size(); i++)
@@ -252,24 +281,23 @@ void QDirect3D12Widget::DrawRenderItems()
 		m_CommandList->IASetIndexBuffer(&ritem->Geo->IndexBufferView());
 		m_CommandList->IASetPrimitiveTopology(ritem->PrimitiveType);
 
-		//UINT objCbvIndex = currFrameResourcesIndex * (UINT)mMultiGeo->RenderItems.size() + ritem->ObjCBIndex;
-		//D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress();
-		//objCBAddress += objCbvIndex * objCBByteSize;
-		//m_CommandList->SetGraphicsRootConstantBufferView(0, objCBAddress);
-
 		//设置根描述符,将根描述符与资源绑定
 		auto objCB = mCurrFrameResource->objCB->Resource();
 		auto objCBAddress = objCB->GetGPUVirtualAddress();
 		objCBAddress += ritem->ObjCBIndex * objCBByteSize;
 		m_CommandList->SetGraphicsRootConstantBufferView(0,//寄存器槽号
 			objCBAddress);//子资源地址
+	// Deprecated: use descriptor table
+	//		UINT objCbvIndex = currFrameResourcesIndex * (UINT)mMultiGeo->RenderItems.size() + ritem->ObjCBIndex;
+	//		auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
+	//		handle.Offset(objCbvIndex, m_cbv_srv_uavDescriptorSize);
+	//		m_CommandList->SetGraphicsRootDescriptorTable(0, //根参数的起始索引
+	//			handle);
 
-		////设置根描述符表
-		//UINT objCbvIndex = currFrameResourcesIndex * (UINT)mMultiGeo->RenderItems.size() + ritem->ObjCBIndex;
-		//auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
-		//handle.Offset(objCbvIndex, m_cbv_srv_uavDescriptorSize);
-		//m_CommandList->SetGraphicsRootDescriptorTable(0, //根参数的起始索引
-		//	handle);
+		auto matCB = mCurrFrameResource->materialCB->Resource();
+		D3D12_GPU_VIRTUAL_ADDRESS matCBAddress = matCB->GetGPUVirtualAddress();
+		matCBAddress += ritem->material->MatCBIndex * matCBByteSize;
+		m_CommandList->SetGraphicsRootConstantBufferView(2, matCBAddress);
 
 		//绘制顶点（通过索引缓冲区绘制）
 		m_CommandList->DrawIndexedInstanced(ritem->IndexCount, //每个实例要绘制的索引数
@@ -440,44 +468,112 @@ void QDirect3D12Widget::BuildLandGeometry() {
 		auto& p = grid.Vertices[i].Position;
 		vertices[i].Pos = p;
 		vertices[i].Pos.y = GetHeight(p.x, p.z);
+		vertices[i].Normal = XMFLOAT3(0.0f, 0.0f, 0.0f);
 		// Color the vertex based on its height.
-		if (vertices[i].Pos.y < -10.0f)
-		{
-			// Sandy beach color.
-			vertices[i].Color = XMFLOAT4(1.0f, 0.96f, 0.62f,
-				1.0f);
-		}
-		else if (vertices[i].Pos.y < 5.0f)
-		{
-			// Light yellow-green.
-			vertices[i].Color = XMFLOAT4(0.48f, 0.77f,
-				0.46f, 1.0f);
-		}
-		else if (vertices[i].Pos.y < 12.0f)
-		{
-			// Dark yellow-green.
-			vertices[i].Color = XMFLOAT4(0.1f, 0.48f, 0.19f,
-				1.0f);
-		}
-		else if (vertices[i].Pos.y < 20.0f)
-		{
-			// Dark brown.
-			vertices[i].Color = XMFLOAT4(0.45f, 0.39f,
-				0.34f, 1.0f);
-		}
-		else
-		{
-			// White snow.
-			vertices[i].Color = XMFLOAT4(1.0f, 1.0f, 1.0f,
-				1.0f);
-		}
+		//if (vertices[i].Pos.y < -10.0f)
+		//{
+		//	// Sandy beach color.
+		//	vertices[i].Color = XMFLOAT4(1.0f, 0.96f, 0.62f,
+		//		1.0f);
+		//}
+		//else if (vertices[i].Pos.y < 5.0f)
+		//{
+		//	 Light yellow-green.
+		//	vertices[i].Color = XMFLOAT4(0.48f, 0.77f,
+		//		0.46f, 1.0f);
+		//}
+		//else if (vertices[i].Pos.y < 12.0f)
+		//{
+		//	 Dark yellow-green.
+		//	vertices[i].Color = XMFLOAT4(0.1f, 0.48f, 0.19f,
+		//		1.0f);
+		//}
+		//else if (vertices[i].Pos.y < 20.0f)
+		//{
+		//	 Dark brown.
+		//	vertices[i].Color = XMFLOAT4(0.45f, 0.39f,
+		//		0.34f, 1.0f);
+		//}
+		//else
+		//{
+		//	 White snow.
+		//	vertices[i].Color = XMFLOAT4(1.0f, 1.0f, 1.0f,
+		//		1.0f);
+		//}
 	}
 	std::vector<std::uint16_t> indices = grid.GetIndices16();
 
 	MeshGeometryHelper helper(this);
 	helper.PushSubmeshGeometry("grid", vertices, indices);
+	helper.CalcNormal();
 	RIManager.AddGeometry("landGeo", helper.CreateMeshGeometry("landGeo"));
-	RIManager.AddRitem("landGeo", "grid");
+	RenderItem* land = RIManager.AddRitem("landGeo", "grid");
+	land->material = RIManager.mMaterials["grass"].get();
+}
+
+void QDirect3D12Widget::BuildLakeGeometry() 
+{
+	ProceduralGeometry::GeometryGenerator geoGen;
+	ProceduralGeometry::GeometryGenerator::MeshData grid =
+		geoGen.CreateGrid(160.0f, 160.0f, 50, 50);
+	//
+	// Extract the vertex elements we are interested and apply the height
+	// function to each vertex. In addition, color the vertices based on
+	// their height so we have sandy looking beaches, grassy low hills,
+	// and snow mountain peaks.
+	//
+	std::vector<Geometry::Vertex> vertices(grid.Vertices.size());
+	for (size_t i = 0; i < grid.Vertices.size(); ++i)
+	{
+		auto& p = grid.Vertices[i].Position;
+		vertices[i].Pos = p;
+		vertices[i].Pos.y = 0.5f;
+		//vertices[i].Color = XMFLOAT4(0.26f, 0.36f, 0.92f, 1.0f);
+		vertices[i].Normal = XMFLOAT3(0,0,0);
+	}
+	std::vector<std::uint16_t> indices = grid.GetIndices16();
+
+	MeshGeometryHelper helper(this);
+	helper.PushSubmeshGeometry("grid", vertices, indices);
+	RIManager.AddGeometry("lakeGeo", helper.CreateMeshGeometry("lakeGeo"));
+	RenderItem* lake = RIManager.AddRitem("lakeGeo", "grid");
+	lake->material = RIManager.mMaterials["water"].get();
+
+	wave = std::make_unique<Waves>(std::move(helper), vertices.size());
+
+	vertex_num = vertices.size();
+}
+
+void QDirect3D12Widget::BuildLights()
+{
+	std::unique_ptr<Light> light = std::make_unique<Light>();
+	light->Direction = XMFLOAT3(0, -1, 0);
+	light->Position = XMFLOAT3(0, 10, 0);
+	light->Strength = XMFLOAT3(1, 0.5, 1);
+	RIManager.AddLight("mainLit", light);
+}
+
+void QDirect3D12Widget::BuildMaterial()
+{
+	std::unique_ptr<Material> grass = std::make_unique<Material>();
+	grass->Name = "grass";
+	grass->MatCBIndex = 0;
+	grass->DiffuseAlbedo = XMFLOAT4(0.2f, 0.6f, 0.6f, 1.0f);
+	grass->FresnelR0 = XMFLOAT3(0.01f, 0.01f, 0.01f);
+	grass->Roughness = 0.125f;
+
+	// This is not a good water material definition, but we do not have
+	// all the rendering tools we need (transparency, environment
+	// reflection), so we fake it for now.
+	auto water = std::make_unique<Material>();
+	water->Name = "water";
+	water->MatCBIndex = 1;
+	water->DiffuseAlbedo = XMFLOAT4(0.0f, 0.2f, 0.6f, 1.0f);
+	water->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
+	water->Roughness = 0.0f;
+
+	RIManager.mMaterials["grass"] = std::move(grass);
+	RIManager.mMaterials["water"] = std::move(water);
 }
 
 void QDirect3D12Widget::BuildRootSignature()
@@ -543,12 +639,13 @@ void QDirect3D12Widget::BuildRootSignature()
 void QDirect3D12Widget::BuildRootSignature2()
 {
 	//根参数可以是描述符表、根描述符、根常量
-	CD3DX12_ROOT_PARAMETER slotRootParameter[2];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[3];
 	slotRootParameter[0].InitAsConstantBufferView(0);
 	slotRootParameter[1].InitAsConstantBufferView(1);
+	slotRootParameter[2].InitAsConstantBufferView(2);
 
 	//根签名由一组根参数构成
-	CD3DX12_ROOT_SIGNATURE_DESC rootSig(2, //根参数的数量
+	CD3DX12_ROOT_SIGNATURE_DESC rootSig(3, //根参数的数量
 		slotRootParameter, //根参数指针
 		0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 	//用单个寄存器槽来创建一个根签名，该槽位指向一个仅含有单个常量缓冲区的描述符区域
@@ -583,13 +680,15 @@ void QDirect3D12Widget::BuildMultiGeometry()
 	for (int i = 0; i < sphere.Vertices.size(); i++)
 	{
 		sphere_vertices[i].Pos = sphere.Vertices[i].Position;
-		sphere_vertices[i].Color = DirectX::XMFLOAT4(DirectX::Colors::Green);
+		//sphere_vertices[i].Color = DirectX::XMFLOAT4(DirectX::Colors::Green);
+		sphere_vertices[i].Normal = sphere.Vertices[i].Normal;
 	}
 	std::vector<Geometry::Vertex> cylinder_vertices(cylinder.Vertices.size());
 	for (int i = 0; i < cylinder.Vertices.size(); i++)
 	{
 		cylinder_vertices[i].Pos = cylinder.Vertices[i].Position;
-		cylinder_vertices[i].Color = DirectX::XMFLOAT4(DirectX::Colors::Blue);
+		//cylinder_vertices[i].Color = DirectX::XMFLOAT4(DirectX::Colors::Blue);
+		cylinder_vertices[i].Normal = cylinder.Vertices[i].Normal;
 	}
 
 	MeshGeometryHelper helper(this);
@@ -616,6 +715,11 @@ void QDirect3D12Widget::BuildRenderItem()
 		XMMATRIX leftSphereWorld = XMMatrixTranslation(-5.0f, 3.5f, -10.0f + i * 5.0f);
 		XMMATRIX rightSphereWorld = XMMatrixTranslation(+5.0f, 3.5f, -10.0f + i * 5.0f);
 
+		leftCylinderRitem->material = RIManager.mMaterials["grass"].get();
+		rightCylinderRitem->material = RIManager.mMaterials["grass"].get();
+		leftSphereRitem->material = RIManager.mMaterials["grass"].get();
+		rightSphereRitem->material = RIManager.mMaterials["grass"].get();
+
 		//左边5个圆柱
 		XMStoreFloat4x4(&(leftCylinderRitem->World), leftCylWorld);
 		//右边5个圆柱
@@ -626,73 +730,73 @@ void QDirect3D12Widget::BuildRenderItem()
 		XMStoreFloat4x4(&(rightSphereRitem->World), rightSphereWorld);
 	}
 }
-void QDirect3D12Widget::BuildBoxGeometry()
-{
-	std::array<Geometry::Vertex, 8> vertices =
-	{
-		Geometry::Vertex({ XMFLOAT3(-1.0f, -1.0f, -1.0f),
-		XMFLOAT4(Colors::White) }),
-		Geometry::Vertex({ XMFLOAT3(-1.0f, +1.0f, -1.0f),
-		XMFLOAT4(Colors::Black) }),
-		Geometry::Vertex({ XMFLOAT3(+1.0f, +1.0f, -1.0f),
-		XMFLOAT4(Colors::Red) }),
-		Geometry::Vertex({ XMFLOAT3(+1.0f, -1.0f, -1.0f),
-		XMFLOAT4(Colors::Green) }),
-		Geometry::Vertex({ XMFLOAT3(-1.0f, -1.0f, +1.0f),
-		XMFLOAT4(Colors::Blue) }),
-		Geometry::Vertex({ XMFLOAT3(-1.0f, +1.0f, +1.0f),
-		XMFLOAT4(Colors::Yellow) }),
-		Geometry::Vertex({ XMFLOAT3(+1.0f, +1.0f, +1.0f),
-		XMFLOAT4(Colors::Cyan) }),
-		Geometry::Vertex({ XMFLOAT3(+1.0f, -1.0f, +1.0f),
-		XMFLOAT4(Colors::Magenta) })
-	};
-	std::array<std::uint16_t, 36> indices =
-	{
-		// front face
-		0, 1, 2,
-		0, 2, 3,
-		// back face
-		4, 6, 5,
-		4, 7, 6,
-		// left face
-		4, 5, 1,
-		4, 1, 0,
-		// right face
-		3, 2, 6,
-		3, 6, 7,
-		// top face
-		1, 5, 6,
-		1, 6, 2,
-		// bottom face
-		4, 0, 3,
-		4, 3, 7
-	};
-
-	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Geometry::Vertex);
-	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
-
-	mMultiGeo = std::make_unique<Geometry::MeshGeometry>();
-	mMultiGeo->Name = "boxGeo";
-
-	ThrowIfFailed(D3DCreateBlob(vbByteSize, &mMultiGeo -> VertexBufferCPU));
-	CopyMemory(mMultiGeo->VertexBufferCPU -> GetBufferPointer(), vertices.data(), vbByteSize);
-	ThrowIfFailed(D3DCreateBlob(ibByteSize, &mMultiGeo -> IndexBufferCPU));
-	CopyMemory(mMultiGeo->IndexBufferCPU -> GetBufferPointer(), indices.data(), ibByteSize);
-
-	mMultiGeo->VertexBufferGPU = CreateDefaultBuffer(vbByteSize, vertices.data(), mMultiGeo->VertexBufferUploader);
-	mMultiGeo->IndexBufferGPU = CreateDefaultBuffer(ibByteSize, indices.data(), mMultiGeo->IndexBufferUploader);
-	mMultiGeo->VertexByteStride = sizeof(Geometry::Vertex);
-	mMultiGeo->VertexBufferByteSize = vbByteSize;
-	mMultiGeo->IndexFormat = DXGI_FORMAT_R16_UINT;
-	mMultiGeo->IndexBufferByteSize = ibByteSize;
-
-	Geometry::SubmeshGeometry submesh;
-	submesh.IndexCount = (UINT)indices.size();
-	submesh.StartIndexLocation = 0;
-	submesh.BaseVertexLocation = 0;
-	mMultiGeo->DrawArgs["box"] = submesh;
-}
+//void QDirect3D12Widget::BuildBoxGeometry()
+//{
+//	std::array<Geometry::Vertex, 8> vertices =
+//	{
+//		Geometry::Vertex({ XMFLOAT3(-1.0f, -1.0f, -1.0f),
+//		XMFLOAT4(Colors::White) }),
+//		Geometry::Vertex({ XMFLOAT3(-1.0f, +1.0f, -1.0f),
+//		XMFLOAT4(Colors::Black) }),
+//		Geometry::Vertex({ XMFLOAT3(+1.0f, +1.0f, -1.0f),
+//		XMFLOAT4(Colors::Red) }),
+//		Geometry::Vertex({ XMFLOAT3(+1.0f, -1.0f, -1.0f),
+//		XMFLOAT4(Colors::Green) }),
+//		Geometry::Vertex({ XMFLOAT3(-1.0f, -1.0f, +1.0f),
+//		XMFLOAT4(Colors::Blue) }),
+//		Geometry::Vertex({ XMFLOAT3(-1.0f, +1.0f, +1.0f),
+//		XMFLOAT4(Colors::Yellow) }),
+//		Geometry::Vertex({ XMFLOAT3(+1.0f, +1.0f, +1.0f),
+//		XMFLOAT4(Colors::Cyan) }),
+//		Geometry::Vertex({ XMFLOAT3(+1.0f, -1.0f, +1.0f),
+//		XMFLOAT4(Colors::Magenta) })
+//	};
+//	std::array<std::uint16_t, 36> indices =
+//	{
+//		// front face
+//		0, 1, 2,
+//		0, 2, 3,
+//		// back face
+//		4, 6, 5,
+//		4, 7, 6,
+//		// left face
+//		4, 5, 1,
+//		4, 1, 0,
+//		// right face
+//		3, 2, 6,
+//		3, 6, 7,
+//		// top face
+//		1, 5, 6,
+//		1, 6, 2,
+//		// bottom face
+//		4, 0, 3,
+//		4, 3, 7
+//	};
+//
+//	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Geometry::Vertex);
+//	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
+//
+//	mMultiGeo = std::make_unique<Geometry::MeshGeometry>();
+//	mMultiGeo->Name = "boxGeo";
+//
+//	ThrowIfFailed(D3DCreateBlob(vbByteSize, &mMultiGeo -> VertexBufferCPU));
+//	CopyMemory(mMultiGeo->VertexBufferCPU -> GetBufferPointer(), vertices.data(), vbByteSize);
+//	ThrowIfFailed(D3DCreateBlob(ibByteSize, &mMultiGeo -> IndexBufferCPU));
+//	CopyMemory(mMultiGeo->IndexBufferCPU -> GetBufferPointer(), indices.data(), ibByteSize);
+//
+//	mMultiGeo->VertexBufferGPU = CreateDefaultBuffer(vbByteSize, vertices.data(), mMultiGeo->VertexBufferUploader);
+//	mMultiGeo->IndexBufferGPU = CreateDefaultBuffer(ibByteSize, indices.data(), mMultiGeo->IndexBufferUploader);
+//	mMultiGeo->VertexByteStride = sizeof(Geometry::Vertex);
+//	mMultiGeo->VertexBufferByteSize = vbByteSize;
+//	mMultiGeo->IndexFormat = DXGI_FORMAT_R16_UINT;
+//	mMultiGeo->IndexBufferByteSize = ibByteSize;
+//
+//	Geometry::SubmeshGeometry submesh;
+//	submesh.IndexCount = (UINT)indices.size();
+//	submesh.StartIndexLocation = 0;
+//	submesh.BaseVertexLocation = 0;
+//	mMultiGeo->DrawArgs["box"] = submesh;
+//}
 
 void QDirect3D12Widget::BuildPSO()
 {
@@ -731,7 +835,9 @@ void QDirect3D12Widget::BuildFrameResources()
 		FrameResourcesArray.push_back(std::make_unique<FrameResource>(
 			m_d3dDevice.Get(),
 			1,     //passCount
-			(UINT)RIManager.mAllRitems.size()));	//objCount
+			(UINT)RIManager.mAllRitems.size(),
+			(UINT)RIManager.mMaterials.size(),
+			vertex_num));	//objCount
 	}
 }
 
@@ -799,13 +905,13 @@ void QDirect3D12Widget::CalculateFrameState()
 	std::wstring windowText = text;
 	SetWindowText(mhMainWnd, windowText.c_str());*/
 	//判断模块
-	if (m_tGameTimer.TotalTime() - timeElapsed >= 1.0f)	//一旦>=0，说明刚好过一秒
+	if (m_tGameTimer.GetTotalTime() - timeElapsed >= 1.0f)	//一旦>=0，说明刚好过一秒
 	{
 		float fps = (float)frameCnt;//每秒多少帧
 		float mspf = 1000.0f / fps;	//每帧多少毫秒
 
 		m_Fps = fps;
-		m_TotalTime = m_tGameTimer.TotalTime();
+		m_TotalTime = m_tGameTimer.GetTotalTime();
 
 		//为计算下一组帧数值而重置
 		frameCnt = 0;

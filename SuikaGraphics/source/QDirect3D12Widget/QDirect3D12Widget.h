@@ -27,6 +27,7 @@
 #include <RenderItemManagment.h>
 #include <InputSystem.h>
 #include <Camera.h>
+#include <wave.h>
 
 using Microsoft::WRL::ComPtr;
 
@@ -109,6 +110,10 @@ private:
     void DrawRenderItems();
     void DrawRenderItems2();
     void BuildLandGeometry();
+    void BuildLakeGeometry();
+    void BuildMaterial();
+    void BuildLights();
+
     //Default buffer
     ComPtr<ID3D12Resource> VertexBufferGPU = nullptr;
     ComPtr<ID3D12Resource> IndexBufferGPU = nullptr;
@@ -133,6 +138,8 @@ private:
     std::vector<std::unique_ptr<FrameResource>> FrameResourcesArray;
     FrameResource* mCurrFrameResource = nullptr;
 
+    std::unique_ptr<Waves> wave;
+    int vertex_num;
 
 private:
     // ================================================================

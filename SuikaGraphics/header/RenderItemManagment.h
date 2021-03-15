@@ -6,6 +6,8 @@
 #include <MeshGeometry.h>
 #include <unordered_map>  
 #include <map>
+#include <Material.h>
+#include <Light.h>
 
 class QDirect3D12Widget;
 
@@ -33,10 +35,18 @@ public:
 
 	// Render items divided by PSO.
 	std::unordered_map<std::string, std::unique_ptr<Geometry::MeshGeometry>> geometries;
+	// Materials
+	std::unordered_map<std::string, std::unique_ptr<Material>> mMaterials;
+	std::unordered_map<std::string, std::unique_ptr<Light>> mLights;
 
 	void AddGeometry(string name, std::unique_ptr<Geometry::MeshGeometry>& geo)
 	{
 		geometries[name] = std::move(geo);
+	}
+
+	void AddLight(string name, std::unique_ptr<Light>& light)
+	{
+		mLights[name] = std::move(light);
 	}
 
 	RenderItem* AddRitem(string geo_name, string sub_name, RenderQueue renderQ = Opaque);
@@ -48,6 +58,8 @@ public:
 			iter->second->DisposeUploaders();
 		}
 	}
+
+	void UpdateData();
 };
 
 class MeshGeometryHelper
@@ -65,6 +77,11 @@ public:
 		IndicesGroups.push_back(indices);
 	}
 
+	void CalcNormal();
+	vector<Vertex>& GetVertices(int i = 0)
+	{
+		return VerticesGroups[i];
+	};
 	std::unique_ptr<MeshGeometry> CreateMeshGeometry(string name);
 
 private:

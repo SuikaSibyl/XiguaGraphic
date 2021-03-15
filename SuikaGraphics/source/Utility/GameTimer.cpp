@@ -21,7 +21,7 @@ GameTimer::GameTimer() :
 /*	Returns the total time elapsed since Reset() was called, NOT counting any
 	time when the clock is stopped.
 */
-float GameTimer::TotalTime()const
+float GameTimer::GetTotalTime()const
 {
 	// If we are stopped, do not count the time that has passed since we stopped.
 	// Moreover, if we previously already had a pause, the distance 
@@ -127,4 +127,9 @@ void GameTimer::Tick()
 float GameTimer::DeltaTime()
 {
 	return Singleton<GameTimer>::get_instance().GetDeltaTime();
+}
+
+float GameTimer::TotalTime()
+{
+	return Singleton<GameTimer>::get_instance().GetTotalTime();
 }

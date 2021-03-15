@@ -1,6 +1,6 @@
 #include <FrameResources.h>
 
-FrameResource::FrameResource(ID3D12Device* device, UINT passCount, UINT objCount)
+FrameResource::FrameResource(ID3D12Device* device, UINT passCount, UINT objCount, UINT materialCount, UINT dynamicCount)
 {
 	ThrowIfFailed(device->CreateCommandAllocator(
 		D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -8,6 +8,8 @@ FrameResource::FrameResource(ID3D12Device* device, UINT passCount, UINT objCount
 
 	objCB = std::make_unique<UploadBuffer<ObjectConstants>>(device, objCount, true);
 	passCB = std::make_unique<UploadBuffer<PassConstants>>(device, passCount, true);
+	materialCB = std::make_unique<UploadBuffer<MaterialConstants>>(device, materialCount, true);
+	dynamicVB = std::make_unique<UploadBuffer<Geometry::Vertex>>(device, dynamicCount, false);
 }
 
 FrameResource::~FrameResource() {}

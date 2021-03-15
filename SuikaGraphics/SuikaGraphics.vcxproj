@@ -193,6 +193,7 @@
     <ClCompile Include="source\QtInterface\main.cpp" />
     <ClCompile Include="source\QtInterface\SuikaGraphics.cpp" />
     <ClCompile Include="source\RenderItemManagment.cpp" />
+    <ClCompile Include="source\Scene\wave.cpp" />
     <ClCompile Include="source\Utility\Debug.cpp" />
     <ClCompile Include="source\Utility\GameTimer.cpp" />
     <ClCompile Include="source\Utility\MathHelper.cpp" />
@@ -207,8 +208,11 @@
     <ClInclude Include="header\Delegate.h" />
     <ClInclude Include="header\InputSystem.h" />
     <ClInclude Include="header\Interaction.h" />
+    <ClInclude Include="header\Light.h" />
+    <ClInclude Include="header\Material.h" />
     <ClInclude Include="header\Singleton.h" />
     <ClInclude Include="header\Transform.h" />
+    <ClInclude Include="header\wave.h" />
     <QtMoc Include="header\SuikaGraphics.h" />
     <ClInclude Include="header\Camera.h" />
     <ClInclude Include="header\d3dx12.h" />
@@ -230,6 +234,13 @@
       <EnableDebuggingInformation Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</EnableDebuggingInformation>
       <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">VS</EntryPointName>
       <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">VS</EntryPointName>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+      </ExcludedFromBuild>
+    </FxCompile>
+    <FxCompile Include="shader\LightingUtils.hlsl">
+      <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+      </EntryPointName>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </FxCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -2,6 +2,9 @@
 
 #include <Utility.h>
 #include <PipelineSetting.h>
+#include <memory>
+#include <UploadBuffer.h>
+#include <Material.h>
 
 namespace Geometry
 {
@@ -9,7 +12,7 @@ namespace Geometry
 	struct Vertex
 	{
 		XMFLOAT3 Pos;
-		XMFLOAT4 Color;
+		XMFLOAT3 Normal;
 	};
 
 	// Defines a subrange of geometry in a MeshGeometry. This is for when
@@ -55,6 +58,8 @@ namespace Geometry
 		// Geometry associated with this render-item. Note that multiple
 		// render-items can share the same geometry.
 		MeshGeometry* Geo = nullptr;
+		// Material
+		Material* material = nullptr;
 
 		// Geometry associated with this render-item. Note that multiple
 		// render-items can share the same geometry.MeshGeometry* Geo = nullptr;

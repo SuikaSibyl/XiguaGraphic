@@ -6,8 +6,9 @@ public:
 	GameTimer();
 
 	static float DeltaTime();
+	static float TotalTime();
 
-	float TotalTime()const; // in seconds
+	float GetTotalTime()const; // in seconds
 	float GetDeltaTime()const; // in seconds
 
 	void Reset(); // Call before message loop.

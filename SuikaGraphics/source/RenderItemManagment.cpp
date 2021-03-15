@@ -76,3 +76,45 @@ std::unique_ptr<MeshGeometry> MeshGeometryHelper::CreateMeshGeometry(string name
 
 	return std::move(geometry);
 }
+
+void MeshGeometryHelper::CalcNormal()
+{
+	for (int i = 0; i < NameGroups.size(); i++)
+	{
+		UINT mNumTriangles = IndicesGroups[i].size() / 3;
+
+		// For each triangle in the mesh:
+		for (UINT j = 0; j < mNumTriangles; j++)
+		{
+			// indices of the ith triangle
+			UINT i0 = IndicesGroups[i][j * 3 + 0];
+			UINT i1 = IndicesGroups[i][j * 3 + 1];
+			UINT i2 = IndicesGroups[i][j * 3 + 2];
+
+			// vertices of ith triangle
+			Vertex v0 = VerticesGroups[i][i0];
+			Vertex v1 = VerticesGroups[i][i1];
+			Vertex v2 = VerticesGroups[i][i2];
+
+			// compute face normal
+			XMVECTOR e0 = XMLoadFloat3(&v1.Pos) - XMLoadFloat3(&v0.Pos);
+			XMVECTOR e1 = XMLoadFloat3(&v2.Pos) - XMLoadFloat3(&v0.Pos);
+			XMVECTOR faceNormal = XMVector3Cross(e0, e1);
+
+			// This triangle shares the following three vertices, 
+			// so add this face normal into the average of these
+			// vertex normals. 
+			XMStoreFloat3(&VerticesGroups[i][i0].Normal, faceNormal + XMLoadFloat3(&VerticesGroups[i][i0].Normal));
+			XMStoreFloat3(&VerticesGroups[i][i1].Normal, faceNormal + XMLoadFloat3(&VerticesGroups[i][i1].Normal));
+			XMStoreFloat3(&VerticesGroups[i][i2].Normal, faceNormal + XMLoadFloat3(&VerticesGroups[i][i2].Normal));
+		}
+		// For each vertex v, we have summed the face normals of all
+		// the triangles that share v, so now we just need to normalize.
+		for (UINT j = 0; j < VerticesGroups[i].size(); ++j)
+		{
+			XMVECTOR faceNormal = XMLoadFloat3(&VerticesGroups[i][j].Normal);
+			faceNormal = XMVector3Normalize(faceNormal);
+			XMStoreFloat3(&VerticesGroups[i][j].Normal, faceNormal);
+		}
+	}
+}

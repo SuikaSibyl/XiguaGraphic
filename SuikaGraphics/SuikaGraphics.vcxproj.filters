@@ -67,6 +67,15 @@
     <Filter Include="Header Files\Component">
       <UniqueIdentifier>{45ec642b-3b28-4434-83cf-c818379b2634}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\Scene">
+      <UniqueIdentifier>{f1981470-79c1-432a-b3bf-d983ec9e90f3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Scene">
+      <UniqueIdentifier>{6e3b5051-52fe-439b-b812-dc93d30acf0f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Rendering">
+      <UniqueIdentifier>{9912d516-e1eb-4389-8cf0-8f8ea7f64ec2}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="SuikaGraphics.qrc">
@@ -98,9 +107,6 @@
     <ClCompile Include="source\Geometry\GeometryGenerator.cpp">
       <Filter>Source Files\Geometry</Filter>
     </ClCompile>
-    <ClCompile Include="source\Pipeline\FrameResource.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="source\RenderItemManagment.cpp">
       <Filter>Source Files\Pipeline</Filter>
     </ClCompile>
@@ -115,6 +121,12 @@
     </ClCompile>
     <ClCompile Include="source\GameObject\Camera.cpp">
       <Filter>Source Files\Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Scene\wave.cpp">
+      <Filter>Source Files\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Pipeline\FrameResource.cpp">
+      <Filter>Source Files\Pipeline</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -175,6 +187,15 @@
     <ClInclude Include="Component.h">
       <Filter>Header Files\Component</Filter>
     </ClInclude>
+    <ClInclude Include="header\wave.h">
+      <Filter>Header Files\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Material.h">
+      <Filter>Header Files\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Light.h">
+      <Filter>Header Files\Rendering</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="source\QDirect3D12Widget\QDirect3D12Widget.h">
@@ -186,6 +207,9 @@
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="shader\Color.hlsl">
+      <Filter>Shader Files</Filter>
+    </FxCompile>
+    <FxCompile Include="shader\LightingUtils.hlsl">
       <Filter>Shader Files</Filter>
     </FxCompile>
   </ItemGroup>
