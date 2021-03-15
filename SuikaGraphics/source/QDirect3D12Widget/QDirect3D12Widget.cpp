@@ -115,6 +115,7 @@ void QDirect3D12Widget::Update()
 	XMMATRIX viewProj = view * proj;
 	// Update the constant buffer with the latest worldViewProj matrix.
 	passConstants.gTime = m_tGameTimer.GetTotalTime();
+	passConstants.eyePos = MainCamera.GetPosition();
 	passConstants.light[0] = *RIManager.mLights["mainLit"];
 	XMStoreFloat4x4(&passConstants.viewProj, XMMatrixTranspose(viewProj));
 	mCurrFrameResource->passCB->CopyData(0, passConstants);
@@ -561,7 +562,7 @@ void QDirect3D12Widget::BuildMaterial()
 	grass->DiffuseAlbedo = XMFLOAT4(0.2f, 0.6f, 0.6f, 1.0f);
 	grass->FresnelR0 = XMFLOAT3(0.01f, 0.01f, 0.01f);
 	grass->Roughness = 0.125f;
-
+	grass->MatCBIndex = 0;
 	// This is not a good water material definition, but we do not have
 	// all the rendering tools we need (transparency, environment
 	// reflection), so we fake it for now.
@@ -571,6 +572,7 @@ void QDirect3D12Widget::BuildMaterial()
 	water->DiffuseAlbedo = XMFLOAT4(0.0f, 0.2f, 0.6f, 1.0f);
 	water->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
 	water->Roughness = 0.0f;
+	water->MatCBIndex = 1;
 
 	RIManager.mMaterials["grass"] = std::move(grass);
 	RIManager.mMaterials["water"] = std::move(water);

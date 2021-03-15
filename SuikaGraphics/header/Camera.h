@@ -19,6 +19,13 @@ public:
 		Defocus
 	};
 
+	XMFLOAT3 GetPosition()
+	{
+		XMFLOAT3 pos;
+		XMStoreFloat3(&pos, position);
+		return pos;
+	}
+
 	Mode mode = Focus;
 
 	XMVECTOR position;

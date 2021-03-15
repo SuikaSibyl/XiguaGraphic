@@ -11,6 +11,8 @@ struct ObjectConstants {
 struct PassConstants
 {
     DirectX::XMFLOAT4X4 viewProj = MathHelper::Identity4x4();
+    XMFLOAT3 eyePos;
     float gTime = 0.0f;
+    XMFLOAT4 ambientLight;
     Light light[16];
 };
