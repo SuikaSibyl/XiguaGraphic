@@ -83,5 +83,5 @@ float4 PS(VertexOut pin) : SV_Target
     
     // return finalCol;
 	float4 finalColor = float4(gLights[0].Strength,1.0) * ((sin(gTime) + 2) / 2);
-    return diffuseAlbedo;
+    return gDiffuseMap.Sample(gSamPointWrap, pin.uv);
 }

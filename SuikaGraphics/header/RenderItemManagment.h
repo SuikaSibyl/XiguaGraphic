@@ -8,6 +8,7 @@
 #include <map>
 #include <Material.h>
 #include <Light.h>
+#include <Texture.h>
 
 class QDirect3D12Widget;
 
@@ -38,6 +39,7 @@ public:
 	// Materials
 	std::unordered_map<std::string, std::unique_ptr<Material>> mMaterials;
 	std::unordered_map<std::string, std::unique_ptr<Light>> mLights;
+	std::unordered_map<std::string, std::unique_ptr<Texture>> mTextures;
 
 	void AddGeometry(string name, std::unique_ptr<Geometry::MeshGeometry>& geo)
 	{

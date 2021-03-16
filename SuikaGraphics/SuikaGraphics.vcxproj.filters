@@ -214,6 +214,9 @@
     <ClInclude Include="header\TextureHelper.h">
       <Filter>Header Files\Texture</Filter>
     </ClInclude>
+    <ClInclude Include="header\ImageBasic.h">
+      <Filter>Header Files\Texture</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="source\QDirect3D12Widget\QDirect3D12Widget.h">

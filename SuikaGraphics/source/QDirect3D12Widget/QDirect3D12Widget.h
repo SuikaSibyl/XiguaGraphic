@@ -40,6 +40,7 @@ class QDirect3D12Widget : public QWidget
 public:
     friend class SuikaGraphics;
     friend class MeshGeometryHelper;
+    friend class TextureHelper;
 
 public:
     QDirect3D12Widget(QWidget * parent);

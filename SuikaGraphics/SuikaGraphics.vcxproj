@@ -208,6 +208,7 @@
     <ClInclude Include="header\DDSTextureLoader.h" />
     <ClInclude Include="header\Debug.h" />
     <ClInclude Include="header\Delegate.h" />
+    <ClInclude Include="header\ImageBasic.h" />
     <ClInclude Include="header\InputSystem.h" />
     <ClInclude Include="header\Interaction.h" />
     <ClInclude Include="header\Light.h" />

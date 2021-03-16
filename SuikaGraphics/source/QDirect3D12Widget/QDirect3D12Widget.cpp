@@ -228,7 +228,7 @@ void QDirect3D12Widget::Draw()
 
 	UINT passConstSize = Utils::CalcConstantBufferByteSize(sizeof(PassConstants));
 	auto passCB = mCurrFrameResource->passCB-> Resource();
-	m_CommandList->SetGraphicsRootConstantBufferView(1, passCB-> GetGPUVirtualAddress());
+	m_CommandList->SetGraphicsRootConstantBufferView(2, passCB-> GetGPUVirtualAddress());
 	// Deprecated: use descriptor table
 	//		int passCbvIndex = (int)mMultiGeo->RenderItems.size() * frameResourcesCount + currFrameResourcesIndex;
 	//		auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
@@ -291,13 +291,13 @@ void QDirect3D12Widget::DrawRenderItems()
 
 		CD3DX12_GPU_DESCRIPTOR_HANDLE tex( m_srvHeap -> GetGPUDescriptorHandleForHeapStart());
 		tex.Offset(0, m_cbv_srv_uavDescriptorSize);
-		m_CommandList->SetGraphicsRootDescriptorTable(3, tex);
+		m_CommandList->SetGraphicsRootDescriptorTable(0, tex);
 
 		//设置根描述符,将根描述符与资源绑定
 		auto objCB = mCurrFrameResource->objCB->Resource();
 		auto objCBAddress = objCB->GetGPUVirtualAddress();
 		objCBAddress += ritem->ObjCBIndex * objCBByteSize;
-		m_CommandList->SetGraphicsRootConstantBufferView(0,//寄存器槽号
+		m_CommandList->SetGraphicsRootConstantBufferView(1,//寄存器槽号
 			objCBAddress);//子资源地址
 	// Deprecated: use descriptor table
 	//		UINT objCbvIndex = currFrameResourcesIndex * (UINT)mMultiGeo->RenderItems.size() + ritem->ObjCBIndex;
@@ -309,7 +309,7 @@ void QDirect3D12Widget::DrawRenderItems()
 		auto matCB = mCurrFrameResource->materialCB->Resource();
 		D3D12_GPU_VIRTUAL_ADDRESS matCBAddress = matCB->GetGPUVirtualAddress();
 		matCBAddress += ritem->material->MatCBIndex * matCBByteSize;
-		m_CommandList->SetGraphicsRootConstantBufferView(2, matCBAddress);
+		m_CommandList->SetGraphicsRootConstantBufferView(3, matCBAddress);
 
 		//绘制顶点（通过索引缓冲区绘制）
 		m_CommandList->DrawIndexedInstanced(ritem->IndexCount, //每个实例要绘制的索引数
@@ -569,13 +569,8 @@ void QDirect3D12Widget::BuildLights()
 
 void QDirect3D12Widget::BuildTexture()
 {
-	auto woodCrateTex = std::make_unique<Texture>();
-	woodCrateTex->Name = "woodCrateTex";
-	woodCrateTex->Filename = L"./Resource/Textures/WoodCrate01.dds";
-	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(
-		m_d3dDevice.Get(), m_CommandList.Get(),
-		woodCrateTex->Filename.c_str(),
-		woodCrateTex->Resource, woodCrateTex -> UploadHeap));
+	TextureHelper helper(this);
+	RIManager.mTextures["wood"] = helper.CreateTexture("woodCrateTex", L"test.bmp");
 
 	auto grassTex = std::make_unique<Texture>();
 	grassTex->Name = "grassTexTex";
@@ -584,6 +579,7 @@ void QDirect3D12Widget::BuildTexture()
 		m_d3dDevice.Get(), m_CommandList.Get(),
 		grassTex->Filename.c_str(),
 		grassTex->Resource, grassTex->UploadHeap));
+	RIManager.mTextures["grass"] = std::move(grassTex);
 
 	auto bricksTex = std::make_unique<Texture>();
 	bricksTex->Name = "bricksTex";
@@ -592,6 +588,7 @@ void QDirect3D12Widget::BuildTexture()
 		m_d3dDevice.Get(), m_CommandList.Get(),
 		bricksTex->Filename.c_str(),
 		bricksTex->Resource, bricksTex->UploadHeap));
+	RIManager.mTextures["brick"] = std::move(bricksTex);
 	// Suppose the following texture resources are alreadycreated.
 		// ID3D12Resource* bricksTex;
 		// ID3D12Resource* stoneTex;
@@ -601,23 +598,23 @@ void QDirect3D12Widget::BuildTexture()
 	CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(m_srvHeap-> GetCPUDescriptorHandleForHeapStart());
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.Format = woodCrateTex->Resource->GetDesc().Format;
+	srvDesc.Format = RIManager.mTextures["wood"]->Resource->GetDesc().Format;
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc.Texture2D.MostDetailedMip = 0;
-	srvDesc.Texture2D.MipLevels = woodCrateTex->Resource -> GetDesc().MipLevels;
+	srvDesc.Texture2D.MipLevels = RIManager.mTextures["wood"]->Resource -> GetDesc().MipLevels;
 	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
-	m_d3dDevice->CreateShaderResourceView(woodCrateTex->Resource.Get(), &srvDesc, hDescriptor);
+	m_d3dDevice->CreateShaderResourceView(RIManager.mTextures["wood"]->Resource.Get(), &srvDesc, hDescriptor);
 
-	// offset to next descriptor in heap
-	hDescriptor.Offset(1, m_cbv_srv_uavDescriptorSize);
-	srvDesc.Format = grassTex->Resource->GetDesc().Format;
-	srvDesc.Texture2D.MipLevels = grassTex->Resource-> GetDesc().MipLevels;
-	m_d3dDevice->CreateShaderResourceView(grassTex->Resource.Get(),&srvDesc, hDescriptor);
+	//// offset to next descriptor in heap
+	//hDescriptor.Offset(1, m_cbv_srv_uavDescriptorSize);
+	//srvDesc.Format = grassTex->Resource->GetDesc().Format;
+	//srvDesc.Texture2D.MipLevels = grassTex->Resource-> GetDesc().MipLevels;
+	//m_d3dDevice->CreateShaderResourceView(grassTex->Resource.Get(),&srvDesc, hDescriptor);
 
-	// offset to next descriptor in heap
-	hDescriptor.Offset(1, m_cbv_srv_uavDescriptorSize); srvDesc.Format = bricksTex->Resource->GetDesc().Format;
-	srvDesc.Texture2D.MipLevels = bricksTex->Resource-> GetDesc().MipLevels;
-	m_d3dDevice->CreateShaderResourceView(bricksTex->Resource.Get(), &srvDesc, hDescriptor);
+	//// offset to next descriptor in heap
+	//hDescriptor.Offset(1, m_cbv_srv_uavDescriptorSize); srvDesc.Format = bricksTex->Resource->GetDesc().Format;
+	//srvDesc.Texture2D.MipLevels = bricksTex->Resource-> GetDesc().MipLevels;
+	//m_d3dDevice->CreateShaderResourceView(bricksTex->Resource.Get(), &srvDesc, hDescriptor);
 }
 
 void QDirect3D12Widget::BuildMaterial()
@@ -706,22 +703,25 @@ void QDirect3D12Widget::BuildRootSignature()
 
 void QDirect3D12Widget::BuildRootSignature2()
 {
+	//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+	//使用描述符表
 	CD3DX12_DESCRIPTOR_RANGE srvTable;
 	srvTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,	//描述符类型
 		1,	//描述符表数量
 		0);	//描述符所绑定的寄存器槽号
 
-	auto staticSamplers = TextureHelper::GetStaticSamplers();	//获得静态采样器集合
-
+	// Root parameter can be a table, root descriptor or root constants.
 	//根参数可以是描述符表、根描述符、根常量
 	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
-	slotRootParameter[0].InitAsConstantBufferView(0);
-	slotRootParameter[1].InitAsConstantBufferView(1);
-	slotRootParameter[2].InitAsConstantBufferView(2);
-	slotRootParameter[3].InitAsDescriptorTable(1,//Range数量
+	slotRootParameter[1].InitAsConstantBufferView(0);
+	slotRootParameter[2].InitAsConstantBufferView(1);
+	slotRootParameter[3].InitAsConstantBufferView(2);
+	// Perfomance TIP: Order from most frequent to least frequent.
+	slotRootParameter[0].InitAsDescriptorTable(1,//Range数量
 		&srvTable,	//Range指针
 		D3D12_SHADER_VISIBILITY_PIXEL);	//该资源只能在像素着色器可读
 
+	auto staticSamplers = TextureHelper::GetStaticSamplers();	//获得静态采样器集合
 	//根签名由一组根参数构成
 	CD3DX12_ROOT_SIGNATURE_DESC rootSig(4, //根参数的数量
 		slotRootParameter, //根参数指针
