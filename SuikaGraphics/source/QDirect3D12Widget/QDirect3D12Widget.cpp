@@ -14,6 +14,8 @@
 #include <SuikaGraphics.h>
 #include <Singleton.h>
 #include <Material.h>
+#include <Texture.h>
+#include <TextureHelper.h>
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
@@ -48,6 +50,7 @@ bool QDirect3D12Widget::Initialize()
 		BuildLandGeometry();
 		BuildLakeGeometry();
 		BuildLights();
+		BuildTexture();
 		
 		// Init Frame Resource
 		// must after all render items pushed;
@@ -218,6 +221,10 @@ void QDirect3D12Widget::Draw()
 	//ID3D12DescriptorHeap* descriptorHeaps[] = { m_cbvHeap.Get() };
 	//m_CommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 	m_CommandList->SetGraphicsRootSignature(mRootSignature.Get());
+	//设置SRV描述符堆
+	//注意这里之所以是数组，是因为还可能包含SRV和UAV，而这里我们只用到了SRV
+	ID3D12DescriptorHeap* descriptorHeaps[] = { m_srvHeap.Get() };
+	m_CommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
 	UINT passConstSize = Utils::CalcConstantBufferByteSize(sizeof(PassConstants));
 	auto passCB = mCurrFrameResource->passCB-> Resource();
@@ -281,6 +288,10 @@ void QDirect3D12Widget::DrawRenderItems()
 		m_CommandList->IASetVertexBuffers(0, 1, &ritem->Geo->VertexBufferView());
 		m_CommandList->IASetIndexBuffer(&ritem->Geo->IndexBufferView());
 		m_CommandList->IASetPrimitiveTopology(ritem->PrimitiveType);
+
+		CD3DX12_GPU_DESCRIPTOR_HANDLE tex( m_srvHeap -> GetGPUDescriptorHandleForHeapStart());
+		tex.Offset(0, m_cbv_srv_uavDescriptorSize);
+		m_CommandList->SetGraphicsRootDescriptorTable(3, tex);
 
 		//设置根描述符,将根描述符与资源绑定
 		auto objCB = mCurrFrameResource->objCB->Resource();
@@ -470,6 +481,7 @@ void QDirect3D12Widget::BuildLandGeometry() {
 		vertices[i].Pos = p;
 		vertices[i].Pos.y = GetHeight(p.x, p.z);
 		vertices[i].Normal = XMFLOAT3(0.0f, 0.0f, 0.0f);
+		vertices[i].TexC = grid.Vertices[i].TexC;
 		// Color the vertex based on its height.
 		//if (vertices[i].Pos.y < -10.0f)
 		//{
@@ -531,6 +543,7 @@ void QDirect3D12Widget::BuildLakeGeometry()
 		vertices[i].Pos.y = 0.5f;
 		//vertices[i].Color = XMFLOAT4(0.26f, 0.36f, 0.92f, 1.0f);
 		vertices[i].Normal = XMFLOAT3(0,0,0);
+		vertices[i].TexC = grid.Vertices[i].TexC;
 	}
 	std::vector<std::uint16_t> indices = grid.GetIndices16();
 
@@ -552,6 +565,59 @@ void QDirect3D12Widget::BuildLights()
 	light->Position = XMFLOAT3(0, 10, 0);
 	light->Strength = XMFLOAT3(1, 0.5, 1);
 	RIManager.AddLight("mainLit", light);
+}
+
+void QDirect3D12Widget::BuildTexture()
+{
+	auto woodCrateTex = std::make_unique<Texture>();
+	woodCrateTex->Name = "woodCrateTex";
+	woodCrateTex->Filename = L"./Resource/Textures/WoodCrate01.dds";
+	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(
+		m_d3dDevice.Get(), m_CommandList.Get(),
+		woodCrateTex->Filename.c_str(),
+		woodCrateTex->Resource, woodCrateTex -> UploadHeap));
+
+	auto grassTex = std::make_unique<Texture>();
+	grassTex->Name = "grassTexTex";
+	grassTex->Filename = L"./Resource/Textures/grass.dds";
+	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(
+		m_d3dDevice.Get(), m_CommandList.Get(),
+		grassTex->Filename.c_str(),
+		grassTex->Resource, grassTex->UploadHeap));
+
+	auto bricksTex = std::make_unique<Texture>();
+	bricksTex->Name = "bricksTex";
+	bricksTex->Filename = L"./Resource/Textures/bricks.dds";
+	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(
+		m_d3dDevice.Get(), m_CommandList.Get(),
+		bricksTex->Filename.c_str(),
+		bricksTex->Resource, bricksTex->UploadHeap));
+	// Suppose the following texture resources are alreadycreated.
+		// ID3D12Resource* bricksTex;
+		// ID3D12Resource* stoneTex;
+		// ID3D12Resource* tileTex;
+
+	// Get pointer to the start of the heap.
+	CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(m_srvHeap-> GetCPUDescriptorHandleForHeapStart());
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.Format = woodCrateTex->Resource->GetDesc().Format;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MostDetailedMip = 0;
+	srvDesc.Texture2D.MipLevels = woodCrateTex->Resource -> GetDesc().MipLevels;
+	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+	m_d3dDevice->CreateShaderResourceView(woodCrateTex->Resource.Get(), &srvDesc, hDescriptor);
+
+	// offset to next descriptor in heap
+	hDescriptor.Offset(1, m_cbv_srv_uavDescriptorSize);
+	srvDesc.Format = grassTex->Resource->GetDesc().Format;
+	srvDesc.Texture2D.MipLevels = grassTex->Resource-> GetDesc().MipLevels;
+	m_d3dDevice->CreateShaderResourceView(grassTex->Resource.Get(),&srvDesc, hDescriptor);
+
+	// offset to next descriptor in heap
+	hDescriptor.Offset(1, m_cbv_srv_uavDescriptorSize); srvDesc.Format = bricksTex->Resource->GetDesc().Format;
+	srvDesc.Texture2D.MipLevels = bricksTex->Resource-> GetDesc().MipLevels;
+	m_d3dDevice->CreateShaderResourceView(bricksTex->Resource.Get(), &srvDesc, hDescriptor);
 }
 
 void QDirect3D12Widget::BuildMaterial()
@@ -640,16 +706,28 @@ void QDirect3D12Widget::BuildRootSignature()
 
 void QDirect3D12Widget::BuildRootSignature2()
 {
+	CD3DX12_DESCRIPTOR_RANGE srvTable;
+	srvTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,	//描述符类型
+		1,	//描述符表数量
+		0);	//描述符所绑定的寄存器槽号
+
+	auto staticSamplers = TextureHelper::GetStaticSamplers();	//获得静态采样器集合
+
 	//根参数可以是描述符表、根描述符、根常量
-	CD3DX12_ROOT_PARAMETER slotRootParameter[3];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
 	slotRootParameter[0].InitAsConstantBufferView(0);
 	slotRootParameter[1].InitAsConstantBufferView(1);
 	slotRootParameter[2].InitAsConstantBufferView(2);
+	slotRootParameter[3].InitAsDescriptorTable(1,//Range数量
+		&srvTable,	//Range指针
+		D3D12_SHADER_VISIBILITY_PIXEL);	//该资源只能在像素着色器可读
 
 	//根签名由一组根参数构成
-	CD3DX12_ROOT_SIGNATURE_DESC rootSig(3, //根参数的数量
+	CD3DX12_ROOT_SIGNATURE_DESC rootSig(4, //根参数的数量
 		slotRootParameter, //根参数指针
-		0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+		staticSamplers.size(), 
+		staticSamplers.data(),	//静态采样器指针
+		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 	//用单个寄存器槽来创建一个根签名，该槽位指向一个仅含有单个常量缓冲区的描述符区域
 	ComPtr<ID3DBlob> serializedRootSig = nullptr;
 	ComPtr<ID3DBlob> errorBlob = nullptr;
@@ -684,6 +762,7 @@ void QDirect3D12Widget::BuildMultiGeometry()
 		sphere_vertices[i].Pos = sphere.Vertices[i].Position;
 		//sphere_vertices[i].Color = DirectX::XMFLOAT4(DirectX::Colors::Green);
 		sphere_vertices[i].Normal = sphere.Vertices[i].Normal;
+		sphere_vertices[i].TexC = sphere.Vertices[i].TexC;
 	}
 	std::vector<Geometry::Vertex> cylinder_vertices(cylinder.Vertices.size());
 	for (int i = 0; i < cylinder.Vertices.size(); i++)
@@ -691,6 +770,7 @@ void QDirect3D12Widget::BuildMultiGeometry()
 		cylinder_vertices[i].Pos = cylinder.Vertices[i].Position;
 		//cylinder_vertices[i].Color = DirectX::XMFLOAT4(DirectX::Colors::Blue);
 		cylinder_vertices[i].Normal = cylinder.Vertices[i].Normal;
+		cylinder_vertices[i].TexC = cylinder.Vertices[i].TexC;
 	}
 
 	MeshGeometryHelper helper(this);
@@ -1164,6 +1244,14 @@ void QDirect3D12Widget::CreateDescriptorHeap()
 	dsvDescriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
 	dsvDescriptorHeapDesc.NodeMask = 0;
 	ThrowIfFailed(m_d3dDevice->CreateDescriptorHeap(&dsvDescriptorHeapDesc, IID_PPV_ARGS(&m_dsvHeap)));
+
+	//然后创建SRV堆
+	D3D12_DESCRIPTOR_HEAP_DESC srvDescriptorHeapDesc;
+	srvDescriptorHeapDesc.NumDescriptors = 3;
+	srvDescriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	srvDescriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	srvDescriptorHeapDesc.NodeMask = 0;
+	ThrowIfFailed(m_d3dDevice->CreateDescriptorHeap(&srvDescriptorHeapDesc, IID_PPV_ARGS(&m_srvHeap)));
 }
 /// <summary>
 /// Initialize:: 8 Create Render Target View

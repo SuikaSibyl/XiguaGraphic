@@ -113,6 +113,7 @@ private:
     void BuildLakeGeometry();
     void BuildMaterial();
     void BuildLights();
+    void BuildTexture();
 
     //Default buffer
     ComPtr<ID3D12Resource> VertexBufferGPU = nullptr;
@@ -196,6 +197,7 @@ private:
     // Descriptor Heaps
     ComPtr<ID3D12DescriptorHeap>    m_rtvHeap = nullptr;
     ComPtr<ID3D12DescriptorHeap>    m_dsvHeap = nullptr;
+    ComPtr<ID3D12DescriptorHeap>    m_srvHeap = nullptr;
     ComPtr<ID3D12DescriptorHeap>    m_cbvHeap = nullptr;
     // Rect & ViewPort
     D3D12_RECT scissorRect;

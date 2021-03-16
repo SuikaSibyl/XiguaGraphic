@@ -76,6 +76,12 @@
     <Filter Include="Header Files\Rendering">
       <UniqueIdentifier>{9912d516-e1eb-4389-8cf0-8f8ea7f64ec2}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\Texture">
+      <UniqueIdentifier>{f2e94241-1159-4685-8c78-104a7657840a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Texture">
+      <UniqueIdentifier>{22af26d8-6748-4280-ae0a-f9ea41b1d478}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="SuikaGraphics.qrc">
@@ -127,6 +133,9 @@
     </ClCompile>
     <ClCompile Include="source\Pipeline\FrameResource.cpp">
       <Filter>Source Files\Pipeline</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Texture\DDSTextureLoader.cpp">
+      <Filter>Source Files\Texture</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -195,6 +204,15 @@
     </ClInclude>
     <ClInclude Include="header\Light.h">
       <Filter>Header Files\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="header\DDSTextureLoader.h">
+      <Filter>Header Files\Texture</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Texture.h">
+      <Filter>Header Files\Texture</Filter>
+    </ClInclude>
+    <ClInclude Include="header\TextureHelper.h">
+      <Filter>Header Files\Texture</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

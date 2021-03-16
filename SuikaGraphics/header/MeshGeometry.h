@@ -13,6 +13,7 @@ namespace Geometry
 	{
 		XMFLOAT3 Pos;
 		XMFLOAT3 Normal;
+		XMFLOAT2 TexC;
 	};
 
 	// Defines a subrange of geometry in a MeshGeometry. This is for when

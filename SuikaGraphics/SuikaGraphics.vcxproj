@@ -194,6 +194,7 @@
     <ClCompile Include="source\QtInterface\SuikaGraphics.cpp" />
     <ClCompile Include="source\RenderItemManagment.cpp" />
     <ClCompile Include="source\Scene\wave.cpp" />
+    <ClCompile Include="source\Texture\DDSTextureLoader.cpp" />
     <ClCompile Include="source\Utility\Debug.cpp" />
     <ClCompile Include="source\Utility\GameTimer.cpp" />
     <ClCompile Include="source\Utility\MathHelper.cpp" />
@@ -204,6 +205,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Component.h" />
+    <ClInclude Include="header\DDSTextureLoader.h" />
     <ClInclude Include="header\Debug.h" />
     <ClInclude Include="header\Delegate.h" />
     <ClInclude Include="header\InputSystem.h" />
@@ -211,6 +213,8 @@
     <ClInclude Include="header\Light.h" />
     <ClInclude Include="header\Material.h" />
     <ClInclude Include="header\Singleton.h" />
+    <ClInclude Include="header\Texture.h" />
+    <ClInclude Include="header\TextureHelper.h" />
     <ClInclude Include="header\Transform.h" />
     <ClInclude Include="header\wave.h" />
     <QtMoc Include="header\SuikaGraphics.h" />
