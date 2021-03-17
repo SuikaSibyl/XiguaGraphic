@@ -40,6 +40,8 @@ class QDirect3D12Widget : public QWidget
 public:
     friend class SuikaGraphics;
     friend class MeshGeometryHelper;
+    friend class RenderItem;
+    friend class RenderItemManager;
     friend class TextureHelper;
 
 public:
@@ -108,7 +110,7 @@ private:
     void BuildMultiGeometry();
     void BuildRenderItem();
     void BuildPSO();
-    void DrawRenderItems();
+    void DrawRenderItems(RenderQueue queue);
     void DrawRenderItems2();
     void BuildLandGeometry();
     void BuildLakeGeometry();
@@ -123,7 +125,6 @@ private:
     ComPtr<ID3D12Resource> VertexBufferUploader = nullptr;
     ComPtr<ID3D12Resource> IndexBufferUploader = nullptr;
 
-    ComPtr<ID3D12PipelineState> mPSO = nullptr;
     ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
     ComPtr<ID3D12RootSignature> mRootSignature2 = nullptr;
    /* std::unique_ptr<UploadBuffer<ObjectConstants>> mObjectCB = nullptr;

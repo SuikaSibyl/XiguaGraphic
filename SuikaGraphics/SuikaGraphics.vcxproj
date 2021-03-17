@@ -195,6 +195,8 @@
     <ClCompile Include="source\RenderItemManagment.cpp" />
     <ClCompile Include="source\Scene\wave.cpp" />
     <ClCompile Include="source\Texture\DDSTextureLoader.cpp" />
+    <ClCompile Include="source\Texture\ImageBasic.cpp" />
+    <ClCompile Include="source\Texture\TextureHelper.cpp" />
     <ClCompile Include="source\Utility\Debug.cpp" />
     <ClCompile Include="source\Utility\GameTimer.cpp" />
     <ClCompile Include="source\Utility\MathHelper.cpp" />

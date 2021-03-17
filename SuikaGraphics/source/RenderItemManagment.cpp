@@ -1,6 +1,7 @@
 #include <RenderItemManagment.h>
 #include <QDirect3D12Widget.h>
 
+RenderItemManager::RenderItemManager(QDirect3D12Widget* ptr) :ptr_d3dWidget(ptr), helper(ptr) {};
 
 RenderItem* RenderItemManager::AddRitem(string geo_name, string sub_name, RenderQueue renderQ)
 {
@@ -13,23 +14,37 @@ RenderItem* RenderItemManager::AddRitem(string geo_name, string sub_name, Render
 	ritem->BaseVertexLocation = geometries[geo_name]->DrawArgs[sub_name].BaseVertexLocation;
 	ritem->StartIndexLocation = geometries[geo_name]->DrawArgs[sub_name].StartIndexLocation;
 
-	switch (renderQ)
-	{
-	case Opaque:
-		mOpaqueRitems.push_back(ritem.get());
-		break;
-	case Transparent:
-		mTransparentRitems.push_back(ritem.get());
-		break;
-	default:
-		break;
-	}
+	mQueueRitems[renderQ].push_back(ritem.get());
 
 	mAllRitems.push_back(std::move(ritem));
 
 	return mAllRitems.back().get();
 }
 
+
+void RenderItemManager::PushTexture(std::string name, std::wstring path)
+{
+	mTextures[name] = helper.CreateTexture(name, path);
+	mTextures[name]->Index = mTextures.size() - 1;
+}
+void RenderItemManager::CreateTextureSRV()
+{
+	for (auto iter = mTextures.begin(); iter != mTextures.end(); iter++)
+	{
+		std::string name = iter->first;
+		// Get pointer to the start of the heap.
+		CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(ptr_d3dWidget->m_srvHeap->GetCPUDescriptorHandleForHeapStart());
+		hDescriptor.Offset(mTextures[name]->Index, ptr_d3dWidget->m_cbv_srv_uavDescriptorSize);
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.Format = mTextures[name]->Resource->GetDesc().Format;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MostDetailedMip = 0;
+		srvDesc.Texture2D.MipLevels = mTextures[name]->Resource->GetDesc().MipLevels;
+		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+		ptr_d3dWidget->m_d3dDevice->CreateShaderResourceView(mTextures[name]->Resource.Get(), &srvDesc, hDescriptor);
+	}
+}
 std::unique_ptr<MeshGeometry> MeshGeometryHelper::CreateMeshGeometry(string name)
 {
 	std::unique_ptr<MeshGeometry> geometry = std::make_unique<MeshGeometry>();

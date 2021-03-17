@@ -14,6 +14,7 @@ SamplerState gSamAnisotropicClamp : register(s5);
 cbuffer cbPerObject : register(b0)
 {
 	float4x4 gWorld;
+	float4x4 gTexTrans;
 };
 
 cbuffer cbPass : register(b1)
@@ -30,7 +31,7 @@ cbuffer cbMaterial : register(b2)
     float4 gDiffuseAlbedo;
     float3 gFresnelR0;
     float gRoughness;
-	float4 gMatTransform;
+	float4x4 gMatTransform;
 };
 
 struct VertexIn
@@ -61,15 +62,25 @@ VertexOut VS(VertexIn vin)
 	// Just pass vertex color into the pixel shader.
 	vout.WorldNormal = vin.Normal/2+float3(.5,.5,.5);
     vout.uv = vin.TexC;
+    //计算UV坐标的静态偏移（相当于MAX中编辑UV）
+    float4 texCoord = mul(float4(vin.TexC, 0.0f, 1.0f), gTexTrans);
+    vout.uv = mul(texCoord, gMatTransform).xy;
     return vout;
 }
 
 float4 PS(VertexOut pin) : SV_Target
 {
-    float4 diffuseAlbedo = gDiffuseMap.Sample(gSamPointWrap, pin.uv) * gDiffuseAlbedo;
+    float4 dark = float4(0.117,0.117,0.117,1 );
+    float4 diffuseAlbedo = gDiffuseMap.Sample(gSamPointWrap, pin.uv);// * gDiffuseAlbedo;
     
+#ifdef ALPHA_TEST
+    clip(diffuseAlbedo.a - 0.1f);
+#endif
+    diffuseAlbedo.a = diffuseAlbedo.a*0.7;
     float3 worldNormal = normalize(pin.WorldNormal);
     float3 worldView = normalize(gEyePosW - pin.WorldPos);
+    float3 worldPosToEye = gEyePosW - pin.WorldPos;
+    float distPosToEye = length(gEyePosW - pin.WorldPos);
     
     Material mat = { float4(1, pin.uv, 1), gFresnelR0, gRoughness };
 	 float3 shadowFactor = 1.0f;//暂时使用1.0，不对计算产生影响
@@ -83,5 +94,9 @@ float4 PS(VertexOut pin) : SV_Target
     
     // return finalCol;
 	float4 finalColor = float4(gLights[0].Strength,1.0) * ((sin(gTime) + 2) / 2);
-    return gDiffuseMap.Sample(gSamPointWrap, pin.uv);
+    
+    float s = saturate((distPosToEye) * 0.001f);
+    float4 finalCol = lerp(diffuseAlbedo, dark, s);
+
+    return finalCol;
 }

@@ -43,6 +43,8 @@ bool QDirect3D12Widget::Initialize()
 		BuildRootSignature2();
 		BuildShadersAndInputLayout();
 
+		// Texture
+		BuildTexture();
 		// Material
 		BuildMaterial();
 		// Geometry Things
@@ -50,7 +52,6 @@ bool QDirect3D12Widget::Initialize()
 		BuildLandGeometry();
 		BuildLakeGeometry();
 		BuildLights();
-		BuildTexture();
 		
 		// Init Frame Resource
 		// must after all render items pushed;
@@ -129,8 +130,10 @@ void QDirect3D12Widget::Update()
 		if (e->NumFramesDirty > 0)
 		{
 			XMMATRIX w = XMLoadFloat4x4(&e->World);
+			XMMATRIX t = XMLoadFloat4x4(&e->texTransform);
 			//XMMATRIX赋值给XMFLOAT4X4
 			XMStoreFloat4x4(&objConstants.world, XMMatrixTranspose(w));
+			XMStoreFloat4x4(&objConstants.texTransform, XMMatrixTranspose(t));
 			//将数据拷贝至GPU缓存
 			mCurrFrameResource->objCB->CopyData(e->ObjCBIndex, objConstants);
 
@@ -186,7 +189,7 @@ void QDirect3D12Widget::Draw()
 	// execution on the GPU.
 	auto currCmdAllocator = mCurrFrameResource->cmdAllocator;
 	DXCall(currCmdAllocator->Reset());//重复使用记录命令的相关内存
-	DXCall(m_CommandList->Reset(currCmdAllocator.Get(), mPSO.Get()));//复用命令列表及其内存
+	DXCall(m_CommandList->Reset(currCmdAllocator.Get(), RIManager.mPSOs["opaque"].Get()));//复用命令列表及其内存
 
 	// Indicate a state transition on the resource usage.
 	//接着我们将后台缓冲资源从呈现状态转换到渲染目标状态（即准备接收图像渲染）。
@@ -201,7 +204,8 @@ void QDirect3D12Widget::Draw()
 	// Clear the back buffer and depth buffer.
 	//然后清除后台缓冲区和深度缓冲区，并赋值。步骤是先获得堆中描述符句柄（即地址），再通过ClearRenderTargetView函数和ClearDepthStencilView函数做清除和赋值。这里我们将RT资源背景色赋值为DarkRed（暗红）。
 	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), ref_mCurrentBackBuffer, m_rtvDescriptorSize);
-	m_CommandList->ClearRenderTargetView(rtvHandle, DirectX::Colors::DarkRed, 0, nullptr);//清除RT背景色为暗红，并且不设置裁剪矩形
+	float dark[4] = { 0.117,0.117,0.117,1 };
+	m_CommandList->ClearRenderTargetView(rtvHandle, dark, 0, nullptr);//清除RT背景色为暗红，并且不设置裁剪矩形
 	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = m_dsvHeap->GetCPUDescriptorHandleForHeapStart();
 	m_CommandList->ClearDepthStencilView(dsvHandle,	//DSV描述符句柄
 		D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL,	//FLAG
@@ -235,7 +239,15 @@ void QDirect3D12Widget::Draw()
 	//		handle.Offset(passCbvIndex, m_cbv_srv_uavDescriptorSize);
 	//		m_CommandList->SetGraphicsRootDescriptorTable(1, //根参数的起始索引 handle);
 
-	DrawRenderItems();
+	//分别设置PSO并绘制对应渲染项
+	m_CommandList->SetPipelineState(RIManager.mPSOs["opaque"].Get());
+	DrawRenderItems(RenderQueue::Opaque);
+
+	m_CommandList->SetPipelineState(RIManager.mPSOs["alphaTest"].Get());
+	DrawRenderItems(RenderQueue::AlphaTest);
+
+	m_CommandList->SetPipelineState(RIManager.mPSOs["transparent"].Get());
+	DrawRenderItems(RenderQueue::Transparent);
 
 	// Indicate a state transition on the resource usage.
 	// 等到渲染完成，我们要将后台缓冲区的状态改成呈现状态，使其之后推到前台缓冲区显示。完了，关闭命令列表，等待传入命令队列。
@@ -269,12 +281,12 @@ void QDirect3D12Widget::Draw()
 	// frames, but that is okay, because we are not touching any frame
 	// resources associated with those frames.
 }
-void QDirect3D12Widget::DrawRenderItems()
+void QDirect3D12Widget::DrawRenderItems(RenderQueue queue)
 {
 	//将智能指针数组转换成普通指针数组
 	std::vector<RenderItem*> ritems;
-	for (auto& e : RIManager.mAllRitems)
-		ritems.push_back(e.get());
+	for (auto& e : (RIManager.mQueueRitems[queue]))
+		ritems.push_back(e);
 
 	auto objectCB = mCurrFrameResource->objCB->Resource();
 	INT objCBByteSize = Utils::CalcConstantBufferByteSize(sizeof(ObjectConstants));
@@ -290,7 +302,7 @@ void QDirect3D12Widget::DrawRenderItems()
 		m_CommandList->IASetPrimitiveTopology(ritem->PrimitiveType);
 
 		CD3DX12_GPU_DESCRIPTOR_HANDLE tex( m_srvHeap -> GetGPUDescriptorHandleForHeapStart());
-		tex.Offset(0, m_cbv_srv_uavDescriptorSize);
+		tex.Offset(ritem->material->DiffuseSrvHeapIndex, m_cbv_srv_uavDescriptorSize);
 		m_CommandList->SetGraphicsRootDescriptorTable(0, tex);
 
 		//设置根描述符,将根描述符与资源绑定
@@ -328,6 +340,7 @@ QDirect3D12Widget::QDirect3D12Widget(QWidget* parent)
 	, m_bRenderActive(false)
 	, m_bStarted(false)
 	, m_tGameTimer(Singleton<GameTimer>::get_instance())
+	, RIManager(this)
 {
 	// Set palette
 	QPalette pal = palette();
@@ -522,6 +535,7 @@ void QDirect3D12Widget::BuildLandGeometry() {
 	RIManager.AddGeometry("landGeo", helper.CreateMeshGeometry("landGeo"));
 	RenderItem* land = RIManager.AddRitem("landGeo", "grid");
 	land->material = RIManager.mMaterials["grass"].get();
+	XMStoreFloat4x4(&land->texTransform, XMMatrixScaling(7.0f, 7.f, 1.0f));
 }
 
 void QDirect3D12Widget::BuildLakeGeometry() 
@@ -550,8 +564,9 @@ void QDirect3D12Widget::BuildLakeGeometry()
 	MeshGeometryHelper helper(this);
 	helper.PushSubmeshGeometry("grid", vertices, indices);
 	RIManager.AddGeometry("lakeGeo", helper.CreateMeshGeometry("lakeGeo"));
-	RenderItem* lake = RIManager.AddRitem("lakeGeo", "grid");
+	RenderItem* lake = RIManager.AddRitem("lakeGeo", "grid", RenderQueue::Transparent);
 	lake->material = RIManager.mMaterials["water"].get();
+	XMStoreFloat4x4(&lake->texTransform, XMMatrixScaling(7.0f, 7.f, 1.0f));
 
 	wave = std::make_unique<Waves>(std::move(helper), vertices.size());
 
@@ -569,52 +584,20 @@ void QDirect3D12Widget::BuildLights()
 
 void QDirect3D12Widget::BuildTexture()
 {
-	TextureHelper helper(this);
-	RIManager.mTextures["wood"] = helper.CreateTexture("woodCrateTex", L"test.bmp");
+	RIManager.PushTexture("wood", L"WoodCrate01.dds");
+	RIManager.PushTexture("grass", L"grass.dds");
+	RIManager.PushTexture("brick", L"bricks.dds");
+	RIManager.PushTexture("water", L"water1.dds");
+	
+	//然后创建SRV堆
+	D3D12_DESCRIPTOR_HEAP_DESC srvDescriptorHeapDesc;
+	srvDescriptorHeapDesc.NumDescriptors = RIManager.mTextures.size();
+	srvDescriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	srvDescriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	srvDescriptorHeapDesc.NodeMask = 0;
+	ThrowIfFailed(m_d3dDevice->CreateDescriptorHeap(&srvDescriptorHeapDesc, IID_PPV_ARGS(&m_srvHeap)));
 
-	auto grassTex = std::make_unique<Texture>();
-	grassTex->Name = "grassTexTex";
-	grassTex->Filename = L"./Resource/Textures/grass.dds";
-	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(
-		m_d3dDevice.Get(), m_CommandList.Get(),
-		grassTex->Filename.c_str(),
-		grassTex->Resource, grassTex->UploadHeap));
-	RIManager.mTextures["grass"] = std::move(grassTex);
-
-	auto bricksTex = std::make_unique<Texture>();
-	bricksTex->Name = "bricksTex";
-	bricksTex->Filename = L"./Resource/Textures/bricks.dds";
-	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(
-		m_d3dDevice.Get(), m_CommandList.Get(),
-		bricksTex->Filename.c_str(),
-		bricksTex->Resource, bricksTex->UploadHeap));
-	RIManager.mTextures["brick"] = std::move(bricksTex);
-	// Suppose the following texture resources are alreadycreated.
-		// ID3D12Resource* bricksTex;
-		// ID3D12Resource* stoneTex;
-		// ID3D12Resource* tileTex;
-
-	// Get pointer to the start of the heap.
-	CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(m_srvHeap-> GetCPUDescriptorHandleForHeapStart());
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.Format = RIManager.mTextures["wood"]->Resource->GetDesc().Format;
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	srvDesc.Texture2D.MostDetailedMip = 0;
-	srvDesc.Texture2D.MipLevels = RIManager.mTextures["wood"]->Resource -> GetDesc().MipLevels;
-	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
-	m_d3dDevice->CreateShaderResourceView(RIManager.mTextures["wood"]->Resource.Get(), &srvDesc, hDescriptor);
-
-	//// offset to next descriptor in heap
-	//hDescriptor.Offset(1, m_cbv_srv_uavDescriptorSize);
-	//srvDesc.Format = grassTex->Resource->GetDesc().Format;
-	//srvDesc.Texture2D.MipLevels = grassTex->Resource-> GetDesc().MipLevels;
-	//m_d3dDevice->CreateShaderResourceView(grassTex->Resource.Get(),&srvDesc, hDescriptor);
-
-	//// offset to next descriptor in heap
-	//hDescriptor.Offset(1, m_cbv_srv_uavDescriptorSize); srvDesc.Format = bricksTex->Resource->GetDesc().Format;
-	//srvDesc.Texture2D.MipLevels = bricksTex->Resource-> GetDesc().MipLevels;
-	//m_d3dDevice->CreateShaderResourceView(bricksTex->Resource.Get(), &srvDesc, hDescriptor);
+	RIManager.CreateTextureSRV();
 }
 
 void QDirect3D12Widget::BuildMaterial()
@@ -639,6 +622,9 @@ void QDirect3D12Widget::BuildMaterial()
 
 	RIManager.mMaterials["grass"] = std::move(grass);
 	RIManager.mMaterials["water"] = std::move(water);
+
+	RIManager.SetTexture("grass", "grass");
+	RIManager.SetTexture("water", "water");
 }
 
 void QDirect3D12Widget::BuildRootSignature()
@@ -719,7 +705,7 @@ void QDirect3D12Widget::BuildRootSignature2()
 	// Perfomance TIP: Order from most frequent to least frequent.
 	slotRootParameter[0].InitAsDescriptorTable(1,//Range数量
 		&srvTable,	//Range指针
-		D3D12_SHADER_VISIBILITY_PIXEL);	//该资源只能在像素着色器可读
+		D3D12_SHADER_VISIBILITY_ALL);	//该资源只能在像素着色器可读
 
 	auto staticSamplers = TextureHelper::GetStaticSamplers();	//获得静态采样器集合
 	//根签名由一组根参数构成
@@ -882,32 +868,63 @@ void QDirect3D12Widget::BuildRenderItem()
 
 void QDirect3D12Widget::BuildPSO()
 {
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc;
-	ZeroMemory(&psoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
-	psoDesc.InputLayout = mpShader->GetInputLayout();
-	psoDesc.pRootSignature = mRootSignature.Get();
-	psoDesc.VS =
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaquePsoDesc;
+	ZeroMemory(&opaquePsoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+	opaquePsoDesc.InputLayout = mpShader->GetInputLayout();
+	opaquePsoDesc.pRootSignature = mRootSignature.Get();
+	opaquePsoDesc.VS =
 	{
 		reinterpret_cast<BYTE*>(mpShader->vsBytecode->GetBufferPointer()),
 			mpShader->vsBytecode->GetBufferSize()
 	};
-	psoDesc.PS =
+	opaquePsoDesc.PS =
 	{
 		reinterpret_cast<BYTE*>(mpShader->psBytecode->GetBufferPointer()),
 			mpShader->psBytecode->GetBufferSize()
 	};
-	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-	psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-	psoDesc.SampleMask = UINT_MAX;
-	psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-	psoDesc.NumRenderTargets = 1;
-	psoDesc.RTVFormats[0] = m_BackBufferFormat;
-	psoDesc.SampleDesc.Count = m4xMsaaState ? 4 : 1;
-	psoDesc.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
-	psoDesc.DSVFormat = m_DepthStencilFormat;
-	ThrowIfFailed(m_d3dDevice->CreateGraphicsPipelineState(&psoDesc,
-		IID_PPV_ARGS(&mPSO)));
+	opaquePsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	opaquePsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	opaquePsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+	opaquePsoDesc.SampleMask = UINT_MAX;
+	opaquePsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	opaquePsoDesc.NumRenderTargets = 1;
+	opaquePsoDesc.RTVFormats[0] = m_BackBufferFormat;
+	opaquePsoDesc.SampleDesc.Count = m4xMsaaState ? 4 : 1;
+	opaquePsoDesc.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
+	opaquePsoDesc.DSVFormat = m_DepthStencilFormat;
+	ThrowIfFailed(m_d3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc,
+		IID_PPV_ARGS(&RIManager.mPSOs["opaque"])));
+
+	//AlphaTest物体的PSO（不需要混合）
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC alphaTestPsoDesc = opaquePsoDesc;//使用不透明物体的PSO初始化
+	alphaTestPsoDesc.PS =
+	{
+		reinterpret_cast<BYTE*>(mpShader->psBytecodeAlphaTest->GetBufferPointer()),
+		mpShader->psBytecodeAlphaTest->GetBufferSize()
+	};
+	alphaTestPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;//双面显示
+	ThrowIfFailed(m_d3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc,
+		IID_PPV_ARGS(&RIManager.mPSOs["alphaTest"])));
+
+
+	//混合物体的PSO（需要混合）
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC transparentPsoDesc = opaquePsoDesc;//使用不透明物体的PSO初始化
+	D3D12_RENDER_TARGET_BLEND_DESC transparencyBlendDesc;
+	transparencyBlendDesc.BlendEnable = true;	//是否开启常规混合（默认值为false）
+	transparencyBlendDesc.LogicOpEnable = false;	//是否开启逻辑混合(默认值为false)
+	transparencyBlendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;	//RGB混合中的源混合因子Fsrc（这里取源颜色的alpha通道值）
+	transparencyBlendDesc.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;//RGB混合中的目标混合因子Fdest（这里取1-alpha）
+	transparencyBlendDesc.BlendOp = D3D12_BLEND_OP_ADD;	//RGB混合运算符(这里选择加法)
+	transparencyBlendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;	//alpha混合中的源混合因子Fsrc（取1）
+	transparencyBlendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;//alpha混合中的目标混合因子Fsrc（取0）
+	transparencyBlendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;//alpha混合运算符(这里选择加法)
+	transparencyBlendDesc.LogicOp = D3D12_LOGIC_OP_NOOP;	//逻辑混合运算符(空操作，即不使用)
+	transparencyBlendDesc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;//后台缓冲区写入遮罩（没有遮罩，即全部写入）
+
+	transparentPsoDesc.BlendState.RenderTarget[0] = transparencyBlendDesc;//赋值RenderTarget第一个元素，即对每一个渲染目标执行相同操作
+
+	ThrowIfFailed(m_d3dDevice->CreateGraphicsPipelineState(&transparentPsoDesc,
+		IID_PPV_ARGS(&RIManager.mPSOs["transparent"])));
 }
 
 void QDirect3D12Widget::BuildFrameResources()
@@ -1244,14 +1261,6 @@ void QDirect3D12Widget::CreateDescriptorHeap()
 	dsvDescriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
 	dsvDescriptorHeapDesc.NodeMask = 0;
 	ThrowIfFailed(m_d3dDevice->CreateDescriptorHeap(&dsvDescriptorHeapDesc, IID_PPV_ARGS(&m_dsvHeap)));
-
-	//然后创建SRV堆
-	D3D12_DESCRIPTOR_HEAP_DESC srvDescriptorHeapDesc;
-	srvDescriptorHeapDesc.NumDescriptors = 3;
-	srvDescriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	srvDescriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-	srvDescriptorHeapDesc.NodeMask = 0;
-	ThrowIfFailed(m_d3dDevice->CreateDescriptorHeap(&srvDescriptorHeapDesc, IID_PPV_ARGS(&m_srvHeap)));
 }
 /// <summary>
 /// Initialize:: 8 Create Render Target View

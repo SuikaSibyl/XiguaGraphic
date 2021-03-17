@@ -9,6 +9,7 @@
 #include <Material.h>
 #include <Light.h>
 #include <Texture.h>
+#include <TextureHelper.h>
 
 class QDirect3D12Widget;
 
@@ -21,18 +22,19 @@ using uint32 = std::uint32_t;
 enum RenderQueue
 {
 	Opaque,
+	AlphaTest,
 	Transparent,
 };
 
 class RenderItemManager
 {
 public:
+	RenderItemManager(QDirect3D12Widget* ptr);
 	// List of all the render items.
 	std::vector<std::unique_ptr<RenderItem>> mAllRitems;
 
 	// Render items divided by PSO.
-	std::vector<RenderItem*> mOpaqueRitems;
-	std::vector<RenderItem*> mTransparentRitems;
+	std::unordered_map<RenderQueue, std::vector<RenderItem*>> mQueueRitems;
 
 	// Render items divided by PSO.
 	std::unordered_map<std::string, std::unique_ptr<Geometry::MeshGeometry>> geometries;
@@ -40,6 +42,14 @@ public:
 	std::unordered_map<std::string, std::unique_ptr<Material>> mMaterials;
 	std::unordered_map<std::string, std::unique_ptr<Light>> mLights;
 	std::unordered_map<std::string, std::unique_ptr<Texture>> mTextures;
+	std::unordered_map<std::string, ComPtr<ID3D12PipelineState>> mPSOs;
+
+	ComPtr<ID3D12PipelineState> AddPSO(string name)
+	{
+		ComPtr<ID3D12PipelineState> pso = nullptr;
+		mPSOs[name] = pso;
+		return mPSOs[name];
+	}
 
 	void AddGeometry(string name, std::unique_ptr<Geometry::MeshGeometry>& geo)
 	{
@@ -61,7 +71,18 @@ public:
 		}
 	}
 
+	void PushTexture(std::string name, std::wstring path);
+	void CreateTextureSRV();
+	void SetTexture(std::string mat_name, std::string texture_name)
+	{
+		mMaterials[mat_name]->DiffuseSrvHeapIndex = mTextures[texture_name]->Index;
+	}
+
 	void UpdateData();
+
+private:
+	QDirect3D12Widget* ptr_d3dWidget;
+	TextureHelper helper;
 };
 
 class MeshGeometryHelper

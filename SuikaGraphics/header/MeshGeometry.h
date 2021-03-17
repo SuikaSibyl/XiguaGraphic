@@ -42,6 +42,8 @@ namespace Geometry
 		// relative to the world space, which defines the position,
 		// orientation, and scale of the object in the world.
 		XMFLOAT4X4 World = MathHelper::Identity4x4();
+		//该几何体的顶点UV缩放矩阵
+		XMFLOAT4X4 texTransform = MathHelper::Identity4x4();
 
 		// Dirty flag indicating the object data has changed and we need
 		// to update the constant buffer. Because we have an object

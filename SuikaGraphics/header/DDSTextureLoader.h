@@ -12,7 +12,7 @@
 
 #if defined(_MSC_VER) && (_MSC_VER<1610) && !defined(_In_reads_)
 #define _In_reads_(exp)
-#define _Out_writes_(exp)
+#define _Out_writes_(exp)c
 #define _In_reads_bytes_(exp)
 #define _In_reads_opt_(exp)
 #define _Outptr_opt_

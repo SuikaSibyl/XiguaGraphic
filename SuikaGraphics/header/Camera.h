@@ -22,7 +22,9 @@ public:
 	XMFLOAT3 GetPosition()
 	{
 		XMFLOAT3 pos;
-		XMStoreFloat3(&pos, position);
+		pos.x = pos_x;
+		pos.y = pos_y;
+		pos.z = pos_z;
 		return pos;
 	}
 
