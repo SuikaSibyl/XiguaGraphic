@@ -40,7 +40,6 @@ bool QDirect3D12Widget::Initialize()
 	{
 		m_CommandList->Reset(m_DirectCmdListAlloc.Get(), nullptr);
 
-		BuildRootSignature2();
 		BuildShadersAndInputLayout();
 
 		// Texture
@@ -57,6 +56,7 @@ bool QDirect3D12Widget::Initialize()
 		// must after all render items pushed;
 		BuildFrameResources();
 
+		BuildRootSignature();
 		//BuildDescriptorHeaps();
 		//BuildConstantBuffers();
 		BuildPSO();
@@ -141,27 +141,27 @@ void QDirect3D12Widget::Update()
 		}
 	}
 
-	// Update Material
-	UploadBuffer<MaterialConstants>* currMaterialCB = mCurrFrameResource -> materialCB.get();
-	for (auto& e : RIManager.mMaterials)
-	{
-		// Only update the cbuffer data if the constants have changed.If
-		// the cbuffer data changes, it needs to be updated for each
-		// FrameResource
-		Material* mat = e.second.get();
-		if (mat->NumFramesDirty > 0)
-		{
-			XMMATRIX matTransform = XMLoadFloat4x4(&mat -> MatTransform);
-			MaterialConstants matConstants;
-			matConstants.DiffuseAlbedo = mat->DiffuseAlbedo;
-			matConstants.FresnelR0 = mat->FresnelR0;
-			matConstants.Roughness = mat->Roughness;
+	//// Update Material
+	//UploadBuffer<MaterialConstants>* currMaterialCB = mCurrFrameResource -> materialCB.get();
+	//for (auto& e : RIManager.mMaterials)
+	//{
+	//	// Only update the cbuffer data if the constants have changed.If
+	//	// the cbuffer data changes, it needs to be updated for each
+	//	// FrameResource
+	//	Material* mat = e.second.get();
+	//	if (mat->NumFramesDirty > 0)
+	//	{
+	//		XMMATRIX matTransform = XMLoadFloat4x4(&mat -> MatTransform);
+	//		MaterialConstants matConstants;
+	//		matConstants.DiffuseAlbedo = mat->DiffuseAlbedo;
+	//		matConstants.FresnelR0 = mat->FresnelR0;
+	//		matConstants.Roughness = mat->Roughness;
 
-			currMaterialCB->CopyData(mat->MatCBIndex, matConstants);
-			// Next FrameResource need to be updated too.
-			mat->NumFramesDirty--;
-		}
-	}
+	//		currMaterialCB->CopyData(mat->MatCBIndex, matConstants);
+	//		// Next FrameResource need to be updated too.
+	//		mat->NumFramesDirty--;
+	//	}
+	//}
 
 	// Update Wave
 	auto currWavesVB = mCurrFrameResource -> dynamicVB.get();
@@ -176,6 +176,29 @@ void QDirect3D12Widget::Update()
 		currWavesVB->CopyData(i, vertices[i]);
 	}
 	RIManager.geometries["lakeGeo"]->VertexBufferGPU = currWavesVB -> Resource();
+
+	// Update Material
+	auto currMatSB = mCurrFrameResource->materialSB.get();
+	for (auto& e : RIManager.mMaterials)
+	{
+		Material* mat = e.second.get();//获得键值对的值，即Material指针（智能指针转普通指针）
+		if (mat->NumFramesDirty > 0)
+		{
+			MaterialData matData;
+			//将定义的材质属性传给常量结构体中的元素
+			matData.diffuseAlbedo = mat->DiffuseAlbedo;
+			matData.fresnelR0 = mat->FresnelR0;
+			matData.roughness = mat->Roughness;
+			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
+			XMStoreFloat4x4(&matData.matTransform, XMMatrixTranspose(matTransform));
+			matData.diffuseMapIndex = mat->DiffuseSrvHeapIndex;//纹理在SRV堆中索引
+
+			//将材质常量数据复制到常量缓冲区对应索引地址处
+			currMatSB->CopyData(mat->MatCBIndex, matData);
+			//更新下一个帧资源
+			mat->NumFramesDirty--;
+		}
+	}
 }
 
 /// <summary>
@@ -230,6 +253,11 @@ void QDirect3D12Widget::Draw()
 	ID3D12DescriptorHeap* descriptorHeaps[] = { m_srvHeap.Get() };
 	m_CommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
+	//设置matSB的描述符(因为只绑定一次，所以不需要做地址偏移)
+	auto matSB = mCurrFrameResource->materialSB->Resource();
+	m_CommandList->SetGraphicsRootShaderResourceView(4,//根参数索引
+		matSB->GetGPUVirtualAddress());//子资源地址
+
 	UINT passConstSize = Utils::CalcConstantBufferByteSize(sizeof(PassConstants));
 	auto passCB = mCurrFrameResource->passCB-> Resource();
 	m_CommandList->SetGraphicsRootConstantBufferView(2, passCB-> GetGPUVirtualAddress());
@@ -238,6 +266,11 @@ void QDirect3D12Widget::Draw()
 	//		auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
 	//		handle.Offset(passCbvIndex, m_cbv_srv_uavDescriptorSize);
 	//		m_CommandList->SetGraphicsRootDescriptorTable(1, //根参数的起始索引 handle);
+
+	//设置描述符表，将纹理资源与流水线绑定(因为只绑定一次，所以不需要做地址偏移)
+	CD3DX12_GPU_DESCRIPTOR_HANDLE tex(m_srvHeap->GetGPUDescriptorHandleForHeapStart());
+	//tex.Offset(ritem->material->DiffuseSrvHeapIndex, m_cbv_srv_uavDescriptorSize);
+	m_CommandList->SetGraphicsRootDescriptorTable(0, tex);
 
 	//分别设置PSO并绘制对应渲染项
 	m_CommandList->SetPipelineState(RIManager.mPSOs["opaque"].Get());
@@ -300,10 +333,6 @@ void QDirect3D12Widget::DrawRenderItems(RenderQueue queue)
 		m_CommandList->IASetVertexBuffers(0, 1, &ritem->Geo->VertexBufferView());
 		m_CommandList->IASetIndexBuffer(&ritem->Geo->IndexBufferView());
 		m_CommandList->IASetPrimitiveTopology(ritem->PrimitiveType);
-
-		CD3DX12_GPU_DESCRIPTOR_HANDLE tex( m_srvHeap -> GetGPUDescriptorHandleForHeapStart());
-		tex.Offset(ritem->material->DiffuseSrvHeapIndex, m_cbv_srv_uavDescriptorSize);
-		m_CommandList->SetGraphicsRootDescriptorTable(0, tex);
 
 		//设置根描述符,将根描述符与资源绑定
 		auto objCB = mCurrFrameResource->objCB->Resource();
@@ -639,69 +668,22 @@ void QDirect3D12Widget::BuildRootSignature()
 	// root signature: define which resources will be bind to pipeline
 	//				   consist of root parameters
 	// root parameter: describe resources
-
-	// 1. Create Root Parameter
-	// -------------------------------------------------
-	// Root parameter can be a table, root descriptor or root constants.
-	// ---- 1.1 declare root parameter
-	CD3DX12_ROOT_PARAMETER slotRootParameter[2];
-	// ---- 1.2 create root parameter
-	//			here means to Create a single descriptor table of CBVs.
-	//			创建由两个CBV所组成的描述符表
-	CD3DX12_DESCRIPTOR_RANGE cbvTable0;
-	cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
-	CD3DX12_DESCRIPTOR_RANGE cbvTable1;
-	cbvTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1);
-	// 描述符类型  - 描述符数量 - 描述符所绑定的寄存器槽号
-	// ---- 1.3 add content to the root parameter
-	slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
-	slotRootParameter[1].InitAsDescriptorTable(1, &cbvTable1);
-
-	// 2. Create Root Signature
-	// -------------------------------------------------
-	// A root signature is an array of root parameters.
-	//根签名由一组根参数构成
-	// ---- 2.1 fill out a structure CD3DX12_ROOT_SIGNATURE_DESC
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(2,
-		slotRootParameter, 0, nullptr,
-		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-	// create a root signature with a single slot which points to a
-	// descriptor range consisting of a single constant buffer
-	// 用单个寄存器槽来创建一个根签名，该槽位指向一个仅含有单个常量缓冲区的描述符区域
-	// ---- 2.2 call CreateRootSignature
-	ComPtr<ID3DBlob> serializedRootSig = nullptr;
-	ComPtr<ID3DBlob> errorBlob = nullptr;
-	HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc,
-			D3D_ROOT_SIGNATURE_VERSION_1,
-			serializedRootSig.GetAddressOf(),
-			errorBlob.GetAddressOf());
-	if (errorBlob != nullptr)
-	{
-		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
-	}
-	ThrowIfFailed(hr);
-	ThrowIfFailed(m_d3dDevice->CreateRootSignature(
-		0,
-		serializedRootSig->GetBufferPointer(),
-		serializedRootSig->GetBufferSize(),
-		IID_PPV_ARGS(&mRootSignature)));
-}
-
-void QDirect3D12Widget::BuildRootSignature2()
-{
 	//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 	//使用描述符表
 	CD3DX12_DESCRIPTOR_RANGE srvTable;
 	srvTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,	//描述符类型
-		1,	//描述符表数量
+		RIManager.mTextures.size(),	//描述符表数量
 		0);	//描述符所绑定的寄存器槽号
 
 	// Root parameter can be a table, root descriptor or root constants.
 	//根参数可以是描述符表、根描述符、根常量
-	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[5];
 	slotRootParameter[1].InitAsConstantBufferView(0);
 	slotRootParameter[2].InitAsConstantBufferView(1);
 	slotRootParameter[3].InitAsConstantBufferView(2);
+	//matSB绑定槽号为0的寄存器（和纹理公用一个SRV寄存器，但是不同Space）
+	//StructureBuffer必须使用SRV或者UAV来绑定
+	slotRootParameter[4].InitAsShaderResourceView(/*寄存器槽号*/0, /*RegisterSpace*/ 1);
 	// Perfomance TIP: Order from most frequent to least frequent.
 	slotRootParameter[0].InitAsDescriptorTable(1,//Range数量
 		&srvTable,	//Range指针
@@ -709,7 +691,7 @@ void QDirect3D12Widget::BuildRootSignature2()
 
 	auto staticSamplers = TextureHelper::GetStaticSamplers();	//获得静态采样器集合
 	//根签名由一组根参数构成
-	CD3DX12_ROOT_SIGNATURE_DESC rootSig(4, //根参数的数量
+	CD3DX12_ROOT_SIGNATURE_DESC rootSig(5, //根参数的数量
 		slotRootParameter, //根参数指针
 		staticSamplers.size(), 
 		staticSamplers.data(),	//静态采样器指针

@@ -20,6 +20,7 @@ public:
 	std::unique_ptr<UploadBuffer<PassConstants>> passCB = nullptr;
 	std::unique_ptr<UploadBuffer<MaterialConstants>> materialCB = nullptr;
 	std::unique_ptr<UploadBuffer<Geometry::Vertex>> dynamicVB = nullptr;
+	std::unique_ptr<UploadBuffer<MaterialData>> materialSB = nullptr;
 	//CPU¶ËµÄÎ§À¸Öµ
 	UINT64 fenceCPU = 0;
 };

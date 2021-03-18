@@ -1,7 +1,22 @@
 #include "LightingUtils.hlsl"
 #define MaxLights 16
 
-Texture2D gDiffuseMap : register(t0);//所有漫反射贴图
+struct MaterialData
+{
+    float4 gDiffuseAlbedo; //材质反照率
+    float3 gFresnelR0; //RF(0)值，即材质的反射属性
+    float gRoughness; //材质的粗糙度
+    float4x4 gMatTransform; //UV动画变换矩阵
+    uint gDiffuseMapIndex;//纹理数组索引
+    uint gMatPad0;
+    uint gMatPad1;
+    uint gMatPad2;
+};
+
+Texture2D gDiffuseMap[4] : register(t0);//所有漫反射贴图
+
+//材质数据的结构化缓冲区，使用t0的space1空间
+StructuredBuffer<MaterialData> gMaterialData : register(t0, space1);
 
 //6个不同类型的采样器
 SamplerState gSamPointWrap : register(s0);
@@ -15,6 +30,10 @@ cbuffer cbPerObject : register(b0)
 {
 	float4x4 gWorld;
 	float4x4 gTexTrans;
+    uint materialIndex;
+    uint pad1;
+    uint pad2;
+    uint pad3;
 };
 
 cbuffer cbPass : register(b1)
@@ -53,6 +72,9 @@ VertexOut VS(VertexIn vin)
 {
 	VertexOut vout;
 
+    //使用结构化缓冲区数组（结构化缓冲区是由若干类型数据所组成的数组）
+    MaterialData matData = gMaterialData[materialIndex];
+
 	float3 PosW = mul(float4(vin.PosL, 1.0f), gWorld).xyz;
 	vout.WorldPos = PosW;
 	float3x3 world = (float3x3)gWorld;
@@ -64,14 +86,15 @@ VertexOut VS(VertexIn vin)
     vout.uv = vin.TexC;
     //计算UV坐标的静态偏移（相当于MAX中编辑UV）
     float4 texCoord = mul(float4(vin.TexC, 0.0f, 1.0f), gTexTrans);
-    vout.uv = mul(texCoord, gMatTransform).xy;
+    vout.uv = texCoord.xy;
     return vout;
 }
 
 float4 PS(VertexOut pin) : SV_Target
 {
+    MaterialData matData = gMaterialData[materialIndex];
     float4 dark = float4(0.117,0.117,0.117,1 );
-    float4 diffuseAlbedo = gDiffuseMap.Sample(gSamPointWrap, pin.uv);// * gDiffuseAlbedo;
+    float4 diffuseAlbedo = gDiffuseMap[matData.gDiffuseMapIndex].Sample(gSamPointWrap, pin.uv);// * gDiffuseAlbedo;
     
 #ifdef ALPHA_TEST
     clip(diffuseAlbedo.a - 0.1f);
@@ -82,10 +105,10 @@ float4 PS(VertexOut pin) : SV_Target
     float3 worldPosToEye = gEyePosW - pin.WorldPos;
     float distPosToEye = length(gEyePosW - pin.WorldPos);
     
-    Material mat = { float4(1, pin.uv, 1), gFresnelR0, gRoughness };
-	 float3 shadowFactor = 1.0f;//暂时使用1.0，不对计算产生影响
+    // Material mat = { float4(1, pin.uv, 1), gFresnelR0, gRoughness };
+	//  float3 shadowFactor = 1.0f;//暂时使用1.0，不对计算产生影响
     //直接光照
-    float4 directLight = float4(ComputerDirectionalLight(gLights[0], mat, worldNormal, worldView),1);
+    // float4 directLight = float4(ComputerDirectionalLight(gLights[0], mat, worldNormal, worldView),1);
     // //环境光照
     // float4 ambient = gAmbientLight * gDiffuseAlbedo;
 	
@@ -98,5 +121,5 @@ float4 PS(VertexOut pin) : SV_Target
     float s = saturate((distPosToEye) * 0.001f);
     float4 finalCol = lerp(diffuseAlbedo, dark, s);
 
-    return finalCol;
+    return diffuseAlbedo;
 }

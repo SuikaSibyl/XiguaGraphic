@@ -27,9 +27,9 @@ public:
 
 		//2.输入布局描述和编译着色器字节码
 
-		vsBytecode = CompileShader(L"shader\\Color.hlsl", nullptr, "VS", "vs_5_0");
-		psBytecode = CompileShader(L"shader\\Color.hlsl", defines, "PS", "ps_5_0");
-		psBytecodeAlphaTest = CompileShader(L"shader\\Color.hlsl", alphaTestDefines, "PS", "ps_5_0");
+		vsBytecode = CompileShader(L"shader\\Color.hlsl", nullptr, "VS", "vs_5_1");
+		psBytecode = CompileShader(L"shader\\Color.hlsl", defines, "PS", "ps_5_1");
+		psBytecodeAlphaTest = CompileShader(L"shader\\Color.hlsl", alphaTestDefines, "PS", "ps_5_1");
 
 		// Create an array of D3D12_INPUT_ELEMENT_DESC
 		//  + each element is a D3D12_INPUT_ELEMENT_DESC

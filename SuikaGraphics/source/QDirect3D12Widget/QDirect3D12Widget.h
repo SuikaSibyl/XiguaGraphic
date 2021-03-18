@@ -103,7 +103,6 @@ private:
     void BuildDescriptorHeaps();
     void BuildConstantBuffers();
     void BuildRootSignature();
-    void BuildRootSignature2();
     void BuildShadersAndInputLayout();
     // ------------------------
     void BuildBoxGeometry(); 
