@@ -121,6 +121,9 @@ void QDirect3D12Widget::Update()
 	passConstants.gTime = m_tGameTimer.GetTotalTime();
 	passConstants.eyePos = MainCamera.GetPosition();
 	passConstants.light[0] = *RIManager.mLights["mainLit"];
+	passConstants.light[1] = *RIManager.mLights["Light1"];
+	passConstants.light[2] = *RIManager.mLights["Light2"];
+	passConstants.light[3] = *RIManager.mLights["Light3"];
 	XMStoreFloat4x4(&passConstants.viewProj, XMMatrixTranspose(viewProj));
 	mCurrFrameResource->passCB->CopyData(0, passConstants);
 
@@ -134,6 +137,7 @@ void QDirect3D12Widget::Update()
 			//XMMATRIX赋值给XMFLOAT4X4
 			XMStoreFloat4x4(&objConstants.world, XMMatrixTranspose(w));
 			XMStoreFloat4x4(&objConstants.texTransform, XMMatrixTranspose(t));
+			objConstants.materialIndex = e->material->MatCBIndex;
 			//将数据拷贝至GPU缓存
 			mCurrFrameResource->objCB->CopyData(e->ObjCBIndex, objConstants);
 
@@ -255,7 +259,7 @@ void QDirect3D12Widget::Draw()
 
 	//设置matSB的描述符(因为只绑定一次，所以不需要做地址偏移)
 	auto matSB = mCurrFrameResource->materialSB->Resource();
-	m_CommandList->SetGraphicsRootShaderResourceView(4,//根参数索引
+	m_CommandList->SetGraphicsRootShaderResourceView(3,//根参数索引
 		matSB->GetGPUVirtualAddress());//子资源地址
 
 	UINT passConstSize = Utils::CalcConstantBufferByteSize(sizeof(PassConstants));
@@ -323,7 +327,6 @@ void QDirect3D12Widget::DrawRenderItems(RenderQueue queue)
 
 	auto objectCB = mCurrFrameResource->objCB->Resource();
 	INT objCBByteSize = Utils::CalcConstantBufferByteSize(sizeof(ObjectConstants));
-	INT matCBByteSize = Utils::CalcConstantBufferByteSize(sizeof(MaterialConstants));
 
 	//遍历渲染项数组
 	for (size_t i = 0; i < ritems.size(); i++)
@@ -346,11 +349,6 @@ void QDirect3D12Widget::DrawRenderItems(RenderQueue queue)
 	//		handle.Offset(objCbvIndex, m_cbv_srv_uavDescriptorSize);
 	//		m_CommandList->SetGraphicsRootDescriptorTable(0, //根参数的起始索引
 	//			handle);
-
-		auto matCB = mCurrFrameResource->materialCB->Resource();
-		D3D12_GPU_VIRTUAL_ADDRESS matCBAddress = matCB->GetGPUVirtualAddress();
-		matCBAddress += ritem->material->MatCBIndex * matCBByteSize;
-		m_CommandList->SetGraphicsRootConstantBufferView(3, matCBAddress);
 
 		//绘制顶点（通过索引缓冲区绘制）
 		m_CommandList->DrawIndexedInstanced(ritem->IndexCount, //每个实例要绘制的索引数
@@ -606,9 +604,27 @@ void QDirect3D12Widget::BuildLights()
 {
 	std::unique_ptr<Light> light = std::make_unique<Light>();
 	light->Direction = XMFLOAT3(0, -1, 0);
-	light->Position = XMFLOAT3(0, 10, 0);
-	light->Strength = XMFLOAT3(1, 0.5, 1);
+	light->Position = XMFLOAT3(0, 1, 0);
+	light->Strength = XMFLOAT3(1, 1, 1);
 	RIManager.AddLight("mainLit", light);
+
+	std::unique_ptr<Light> light1 = std::make_unique<Light>();
+	light1->Direction = XMFLOAT3(0, -1, 0);
+	light1->Position = XMFLOAT3(2, 1, 0);
+	light1->Strength = XMFLOAT3(1, 1, 1);
+	RIManager.AddLight("Light1", light1);
+
+	std::unique_ptr<Light> light2 = std::make_unique<Light>();
+	light2->Direction = XMFLOAT3(0, -1, 0);
+	light2->Position = XMFLOAT3(0, 1, 3);
+	light2->Strength = XMFLOAT3(1, 1, 1);
+	RIManager.AddLight("Light2", light2);
+
+	std::unique_ptr<Light> light3 = std::make_unique<Light>();
+	light3->Direction = XMFLOAT3(0, -1, 0);
+	light3->Position = XMFLOAT3(2, 1, -3);
+	light3->Strength = XMFLOAT3(1, 1, 1);
+	RIManager.AddLight("Light3", light3);
 }
 
 void QDirect3D12Widget::BuildTexture()
@@ -638,6 +654,7 @@ void QDirect3D12Widget::BuildMaterial()
 	grass->FresnelR0 = XMFLOAT3(0.01f, 0.01f, 0.01f);
 	grass->Roughness = 0.125f;
 	grass->MatCBIndex = 0;
+
 	// This is not a good water material definition, but we do not have
 	// all the rendering tools we need (transparency, environment
 	// reflection), so we fake it for now.
@@ -677,13 +694,12 @@ void QDirect3D12Widget::BuildRootSignature()
 
 	// Root parameter can be a table, root descriptor or root constants.
 	//根参数可以是描述符表、根描述符、根常量
-	CD3DX12_ROOT_PARAMETER slotRootParameter[5];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
 	slotRootParameter[1].InitAsConstantBufferView(0);
 	slotRootParameter[2].InitAsConstantBufferView(1);
-	slotRootParameter[3].InitAsConstantBufferView(2);
 	//matSB绑定槽号为0的寄存器（和纹理公用一个SRV寄存器，但是不同Space）
 	//StructureBuffer必须使用SRV或者UAV来绑定
-	slotRootParameter[4].InitAsShaderResourceView(/*寄存器槽号*/0, /*RegisterSpace*/ 1);
+	slotRootParameter[3].InitAsShaderResourceView(/*寄存器槽号*/0, /*RegisterSpace*/ 1);
 	// Perfomance TIP: Order from most frequent to least frequent.
 	slotRootParameter[0].InitAsDescriptorTable(1,//Range数量
 		&srvTable,	//Range指针
@@ -691,7 +707,7 @@ void QDirect3D12Widget::BuildRootSignature()
 
 	auto staticSamplers = TextureHelper::GetStaticSamplers();	//获得静态采样器集合
 	//根签名由一组根参数构成
-	CD3DX12_ROOT_SIGNATURE_DESC rootSig(5, //根参数的数量
+	CD3DX12_ROOT_SIGNATURE_DESC rootSig(4, //根参数的数量
 		slotRootParameter, //根参数指针
 		staticSamplers.size(), 
 		staticSamplers.data(),	//静态采样器指针

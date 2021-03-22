@@ -1,4 +1,5 @@
 #include "LightingUtils.hlsl"
+#include "PBR.hlsl"
 #define MaxLights 16
 
 struct MaterialData
@@ -13,8 +14,14 @@ struct MaterialData
     uint gMatPad2;
 };
 
+// An array of textures, which is only supported in shader model 5.1+.
+// Unlike Texture2DArray, the textures in this array can be different
+// sizes and formats, making it more flexible than texture arrays.
 Texture2D gDiffuseMap[4] : register(t0);//所有漫反射贴图
 
+// Put in space1, so the texture array does not overlap with these.
+// The texture array above will occupy registers t0, t1, …, t6 in
+// space0.
 //材质数据的结构化缓冲区，使用t0的space1空间
 StructuredBuffer<MaterialData> gMaterialData : register(t0, space1);
 
@@ -45,14 +52,6 @@ cbuffer cbPass : register(b1)
 	Light gLights[MaxLights];
 };
 
-cbuffer cbMaterial : register(b2)
-{
-    float4 gDiffuseAlbedo;
-    float3 gFresnelR0;
-    float gRoughness;
-	float4x4 gMatTransform;
-};
-
 struct VertexIn
 {
 	float3 PosL  : POSITION;
@@ -66,6 +65,7 @@ struct VertexOut
     float3 WorldPos : POSITION;
     float3 WorldNormal : NORMAL;
     float2 uv: TEXCOORD;
+	float4 Color  : COLOR;
 };
 
 VertexOut VS(VertexIn vin)
@@ -82,11 +82,11 @@ VertexOut VS(VertexIn vin)
 	vout.PosH = mul(float4(PosW, 1.0f), gViewProj);
 	
 	// Just pass vertex color into the pixel shader.
-	vout.WorldNormal = vin.Normal/2+float3(.5,.5,.5);
     vout.uv = vin.TexC;
     //计算UV坐标的静态偏移（相当于MAX中编辑UV）
     float4 texCoord = mul(float4(vin.TexC, 0.0f, 1.0f), gTexTrans);
     vout.uv = texCoord.xy;
+    vout.Color = matData.gDiffuseAlbedo;
     return vout;
 }
 
@@ -94,32 +94,61 @@ float4 PS(VertexOut pin) : SV_Target
 {
     MaterialData matData = gMaterialData[materialIndex];
     float4 dark = float4(0.117,0.117,0.117,1 );
-    float4 diffuseAlbedo = gDiffuseMap[matData.gDiffuseMapIndex].Sample(gSamPointWrap, pin.uv);// * gDiffuseAlbedo;
-    
-#ifdef ALPHA_TEST
-    clip(diffuseAlbedo.a - 0.1f);
-#endif
-    diffuseAlbedo.a = diffuseAlbedo.a*0.7;
-    float3 worldNormal = normalize(pin.WorldNormal);
-    float3 worldView = normalize(gEyePosW - pin.WorldPos);
-    float3 worldPosToEye = gEyePosW - pin.WorldPos;
-    float distPosToEye = length(gEyePosW - pin.WorldPos);
-    
-    // Material mat = { float4(1, pin.uv, 1), gFresnelR0, gRoughness };
-	//  float3 shadowFactor = 1.0f;//暂时使用1.0，不对计算产生影响
-    //直接光照
-    // float4 directLight = float4(ComputerDirectionalLight(gLights[0], mat, worldNormal, worldView),1);
-    // //环境光照
-    // float4 ambient = gAmbientLight * gDiffuseAlbedo;
-	
-    // float4 finalCol = ambient + directLight;
-    // finalCol.a = gDiffuseAlbedo.a;
-    
-    // return finalCol;
-	float4 finalColor = float4(gLights[0].Strength,1.0) * ((sin(gTime) + 2) / 2);
-    
-    float s = saturate((distPosToEye) * 0.001f);
-    float4 finalCol = lerp(diffuseAlbedo, dark, s);
 
-    return diffuseAlbedo;
+    float4 albedo = gDiffuseMap[matData.gDiffuseMapIndex].Sample(gSamPointWrap, pin.uv);
+    
+    float3 N = normalize(pin.WorldNormal);
+    float3 V = normalize(gEyePosW - pin.WorldPos);
+
+    float metallic  =   0;
+    float roughness =   0.2;
+    float ao      =   0;
+
+    float3 Lo = float3(0.0,0.0,0.0);
+
+    for(int i=0;i<4;i++)
+    {
+        float3 L = normalize(gLights[i].Position - pin.WorldPos);
+        float3 H = normalize(V + L);
+        
+        float distance    = length(gLights[i].Position - pin.WorldPos);
+        float attenuation = 1.0 / (distance * distance);
+        float3 radiance   = gLights[i].Strength * attenuation; 
+        
+        float3 F  = FresnelSchlick(metallic, albedo.rgb, H, V);
+        float NDF = DistributionGGX(N, H, roughness);       
+        float G   = GeometrySmith(N, V, L, roughness);
+        
+        float3 nominator    = NDF * G * F;
+        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.001; 
+        float3 specular     = nominator / denominator;  
+
+        float3 kS = F;
+        float3 kD = float3(1.0, 1.0, 1.0) - kS;
+
+        kD *= 1.0 - metallic;  
+
+        float NdotL = max(dot(N, L), 0.0);
+        Lo += (kD * albedo / PI + specular) * radiance * NdotL;
+    }
+    
+    float3 ambient = float3(0.03, 0.03, 0.03) * albedo * ao;
+    float3 color   = ambient + Lo;
+
+#ifdef ALPHA_TEST
+    clip(albedo.a - 0.1f);
+#endif
+    // albedo.a = albedo.a*0.7;
+    // float3 worldNormal = normalize(pin.WorldNormal);
+    // float3 worldView = normalize(gEyePosW - pin.WorldPos);
+    // float3 worldPosToEye = gEyePosW - pin.WorldPos;
+    // float distPosToEye = length(gEyePosW - pin.WorldPos);
+    
+    // // return finalCol;
+	// float4 finalColor = float4(gLights[0].Strength,1.0) * ((sin(gTime) + 2) / 2);
+    
+    // float s = saturate((distPosToEye) * 0.001f);
+    // float4 finalCol = lerp(diffuseAlbedo, dark, s);
+
+    return float4(ReinhardHDR(color), 1.0);
 }
