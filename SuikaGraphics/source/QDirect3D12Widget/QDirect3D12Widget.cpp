@@ -562,7 +562,7 @@ void QDirect3D12Widget::BuildLandGeometry() {
 	RIManager.AddGeometry("landGeo", helper.CreateMeshGeometry("landGeo"));
 	RenderItem* land = RIManager.AddRitem("landGeo", "grid");
 	land->material = RIManager.mMaterials["grass"].get();
-	XMStoreFloat4x4(&land->texTransform, XMMatrixScaling(7.0f, 7.f, 1.0f));
+	XMStoreFloat4x4(&land->texTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 }
 
 void QDirect3D12Widget::BuildLakeGeometry() 
@@ -593,7 +593,7 @@ void QDirect3D12Widget::BuildLakeGeometry()
 	RIManager.AddGeometry("lakeGeo", helper.CreateMeshGeometry("lakeGeo"));
 	RenderItem* lake = RIManager.AddRitem("lakeGeo", "grid", RenderQueue::Transparent);
 	lake->material = RIManager.mMaterials["water"].get();
-	XMStoreFloat4x4(&lake->texTransform, XMMatrixScaling(7.0f, 7.f, 1.0f));
+	XMStoreFloat4x4(&lake->texTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 
 	wave = std::make_unique<Waves>(std::move(helper), vertices.size());
 
@@ -633,6 +633,8 @@ void QDirect3D12Widget::BuildTexture()
 	RIManager.PushTexture("grass", L"grass.dds");
 	RIManager.PushTexture("brick", L"bricks.dds");
 	RIManager.PushTexture("water", L"water1.dds");
+	RIManager.PushTexture("test", L"test.bmp");
+	RIManager.PushTexture("env", L"03-Ueno-Shrine_3k.hdr");
 	
 	//然后创建SRV堆
 	D3D12_DESCRIPTOR_HEAP_DESC srvDescriptorHeapDesc;
@@ -669,7 +671,7 @@ void QDirect3D12Widget::BuildMaterial()
 	RIManager.mMaterials["grass"] = std::move(grass);
 	RIManager.mMaterials["water"] = std::move(water);
 
-	RIManager.SetTexture("grass", "grass");
+	RIManager.SetTexture("grass", "env");
 	RIManager.SetTexture("water", "water");
 }
 
@@ -687,14 +689,20 @@ void QDirect3D12Widget::BuildRootSignature()
 	// root parameter: describe resources
 	//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 	//使用描述符表
+	//绑定CubeMap的Range
+	CD3DX12_DESCRIPTOR_RANGE srvTableCube;
+	srvTableCube.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,	//描述符类型
+		1,	//表中的描述符数量（纹理数量）
+		0);	//描述符所绑定的寄存器槽号
+
 	CD3DX12_DESCRIPTOR_RANGE srvTable;
 	srvTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,	//描述符类型
 		RIManager.mTextures.size(),	//描述符表数量
-		0);	//描述符所绑定的寄存器槽号
+		1);	//描述符所绑定的寄存器槽号
 
 	// Root parameter can be a table, root descriptor or root constants.
 	//根参数可以是描述符表、根描述符、根常量
-	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[5];
 	slotRootParameter[1].InitAsConstantBufferView(0);
 	slotRootParameter[2].InitAsConstantBufferView(1);
 	//matSB绑定槽号为0的寄存器（和纹理公用一个SRV寄存器，但是不同Space）
@@ -704,10 +712,13 @@ void QDirect3D12Widget::BuildRootSignature()
 	slotRootParameter[0].InitAsDescriptorTable(1,//Range数量
 		&srvTable,	//Range指针
 		D3D12_SHADER_VISIBILITY_ALL);	//该资源只能在像素着色器可读
+	slotRootParameter[4].InitAsDescriptorTable(1,//Range数量
+		&srvTableCube,	//Range指针
+		D3D12_SHADER_VISIBILITY_PIXEL);	//该资源只能在像素着色器可读
 
 	auto staticSamplers = TextureHelper::GetStaticSamplers();	//获得静态采样器集合
 	//根签名由一组根参数构成
-	CD3DX12_ROOT_SIGNATURE_DESC rootSig(4, //根参数的数量
+	CD3DX12_ROOT_SIGNATURE_DESC rootSig(5, //根参数的数量
 		slotRootParameter, //根参数指针
 		staticSamplers.size(), 
 		staticSamplers.data(),	//静态采样器指针

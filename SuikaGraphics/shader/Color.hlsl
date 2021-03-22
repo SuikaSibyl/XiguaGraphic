@@ -14,10 +14,11 @@ struct MaterialData
     uint gMatPad2;
 };
 
+TextureCube gCubeMap : register(t0);
 // An array of textures, which is only supported in shader model 5.1+.
 // Unlike Texture2DArray, the textures in this array can be different
 // sizes and formats, making it more flexible than texture arrays.
-Texture2D gDiffuseMap[4] : register(t0);//所有漫反射贴图
+Texture2D gDiffuseMap[4] : register(t1);//所有漫反射贴图
 
 // Put in space1, so the texture array does not overlap with these.
 // The texture array above will occupy registers t0, t1, …, t6 in
@@ -112,7 +113,7 @@ float4 PS(VertexOut pin) : SV_Target
         float3 H = normalize(V + L);
         
         float distance    = length(gLights[i].Position - pin.WorldPos);
-        float attenuation = 1.0 / (distance * distance);
+        float attenuation = 1.0;// / (distance * distance);
         float3 radiance   = gLights[i].Strength * attenuation; 
         
         float3 F  = FresnelSchlick(metallic, albedo.rgb, H, V);
@@ -150,5 +151,5 @@ float4 PS(VertexOut pin) : SV_Target
     // float s = saturate((distPosToEye) * 0.001f);
     // float4 finalCol = lerp(diffuseAlbedo, dark, s);
 
-    return float4(ReinhardHDR(color), 1.0);
+    return float4(ReinhardHDR(albedo), 1.0);
 }

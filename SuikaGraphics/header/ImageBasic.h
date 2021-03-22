@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include "../thirdparty/CImg/CImg.h"
+#include "../../thirdparty/StdImage/stb_image.h"
 using namespace cimg_library;
 using namespace std;
 
@@ -44,11 +45,18 @@ namespace IMG
 		vector<Color4<uint8_t>> pixels;
 	};
 
+	struct HDRImage
+	{
+		ImageHeader header;
+		vector<Color4<float>> pixels;
+	};
+
 	class ImageHelper
 	{
 	public:
 		static void CreatePic();
 		static Image ReadPic(std::wstring path);
+		static HDRImage ReadHDRPic(std::wstring path);
 
 	private:
 

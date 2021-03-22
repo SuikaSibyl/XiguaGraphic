@@ -137,10 +137,13 @@
     <ClCompile Include="source\Texture\DDSTextureLoader.cpp">
       <Filter>Source Files\Texture</Filter>
     </ClCompile>
-    <ClCompile Include="source\Texture\TextureHelper.cpp">
+    <ClCompile Include="source\Texture\ImageBasic.cpp">
       <Filter>Source Files\Texture</Filter>
     </ClCompile>
-    <ClCompile Include="source\Texture\ImageBasic.cpp">
+    <ClCompile Include="source\Texture\std_image.cpp">
+      <Filter>Source Files\Texture</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Texture\TextureHelper.cpp">
       <Filter>Source Files\Texture</Filter>
     </ClCompile>
   </ItemGroup>
