@@ -54,14 +54,14 @@ namespace IMG
 	struct CubemapImage
 	{
 		ImageHeader header;
-		vector<Color4<uint8_t>> pixels;
+		vector<Color4<uint8_t>> sub_pixels[6];
 	};
 
 	class ImageHelper
 	{
 	public:
 		static void CreatePic();
-		static Image ReadPic(std::wstring path);
+		static Image ReadPic(std::wstring path, std::wstring postfix);
 		static HDRImage ReadHDRPic(std::wstring path);
 		static CubemapImage ReadCubemapPic(std::wstring prename, std::wstring postfix);
 

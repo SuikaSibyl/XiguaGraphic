@@ -47,6 +47,7 @@ bool QDirect3D12Widget::Initialize()
 		// Material
 		BuildMaterial();
 		// Geometry Things
+		BuildBoxGeometry();
 		BuildMultiGeometry();
 		BuildLandGeometry();
 		BuildLakeGeometry();
@@ -275,6 +276,11 @@ void QDirect3D12Widget::Draw()
 	CD3DX12_GPU_DESCRIPTOR_HANDLE tex(m_srvHeap->GetGPUDescriptorHandleForHeapStart());
 	//tex.Offset(ritem->material->DiffuseSrvHeapIndex, m_cbv_srv_uavDescriptorSize);
 	m_CommandList->SetGraphicsRootDescriptorTable(0, tex);
+
+	//绑定CubeMap资源所对应的SRV描述符
+	CD3DX12_GPU_DESCRIPTOR_HANDLE skyTexDescriptor(m_srvHeap->GetGPUDescriptorHandleForHeapStart());
+	skyTexDescriptor.Offset(RIManager.mMaterials["sky"]->DiffuseSrvHeapIndex, m_cbv_srv_uavDescriptorSize);
+	m_CommandList->SetGraphicsRootDescriptorTable(4, skyTexDescriptor);
 
 	//分别设置PSO并绘制对应渲染项
 	m_CommandList->SetPipelineState(RIManager.mPSOs["opaque"].Get());
@@ -636,6 +642,7 @@ void QDirect3D12Widget::BuildTexture()
 	RIManager.PushTexture("test", L"test.bmp");
 	RIManager.PushTexture("env", L"03-Ueno-Shrine_3k.hdr");
 	RIManager.PushTexture("cubeenv", L"Cubemaps\\skybox\\sky.jpg", true);
+	//RIManager.PushTexture("cubeenv", L"Cubemaps\\sunsetcube1024.dds", true);
 	
 	//然后创建SRV堆
 	D3D12_DESCRIPTOR_HEAP_DESC srvDescriptorHeapDesc;
@@ -656,7 +663,6 @@ void QDirect3D12Widget::BuildMaterial()
 	grass->DiffuseAlbedo = XMFLOAT4(0.2f, 0.6f, 0.6f, 1.0f);
 	grass->FresnelR0 = XMFLOAT3(0.01f, 0.01f, 0.01f);
 	grass->Roughness = 0.125f;
-	grass->MatCBIndex = 0;
 
 	// This is not a good water material definition, but we do not have
 	// all the rendering tools we need (transparency, environment
@@ -667,13 +673,21 @@ void QDirect3D12Widget::BuildMaterial()
 	water->DiffuseAlbedo = XMFLOAT4(0.0f, 0.2f, 0.6f, 1.0f);
 	water->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
 	water->Roughness = 0.0f;
-	water->MatCBIndex = 1;
+
+	auto sky = std::make_unique<Material>();
+	sky->Name = "water";
+	sky->MatCBIndex = 2;
+	sky->DiffuseAlbedo = XMFLOAT4(0.0f, 0.2f, 0.6f, 1.0f);
+	sky->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
+	sky->Roughness = 0.0f;
 
 	RIManager.mMaterials["grass"] = std::move(grass);
 	RIManager.mMaterials["water"] = std::move(water);
+	RIManager.mMaterials["sky"] = std::move(sky);
 
 	RIManager.SetTexture("grass", "env");
 	RIManager.SetTexture("water", "water");
+	RIManager.SetTexture("sky", "cubeenv");
 }
 
 void QDirect3D12Widget::BuildRootSignature()
@@ -746,6 +760,26 @@ void QDirect3D12Widget::BuildShadersAndInputLayout()
 	mpShader = new Shader(m_d3dDevice);
 }
 
+void QDirect3D12Widget::BuildBoxGeometry()
+{
+	ProceduralGeometry::GeometryGenerator geoGen;
+	ProceduralGeometry::GeometryGenerator::MeshData box = geoGen.CreateCube();
+
+	std::vector<Geometry::Vertex> box_vertices(box.Vertices.size());
+	for (int i = 0; i < box.Vertices.size(); i++)
+	{
+		box_vertices[i].Pos = box.Vertices[i].Position;
+		box_vertices[i].Normal = box.Vertices[i].Normal;
+		box_vertices[i].TexC = box.Vertices[i].TexC;
+	}
+
+	MeshGeometryHelper helper(this);
+	helper.PushSubmeshGeometry("cube", box_vertices, box.GetIndices16());
+	RIManager.AddGeometry("cube", helper.CreateMeshGeometry("cube"));
+	RenderItem* skyboxRitem = RIManager.AddRitem("cube", "cube", RenderQueue::Opaque);
+	skyboxRitem->material = RIManager.mMaterials["grass"].get();
+}
+
 void QDirect3D12Widget::BuildMultiGeometry()
 {
 	ProceduralGeometry::GeometryGenerator geoGen;
@@ -756,7 +790,6 @@ void QDirect3D12Widget::BuildMultiGeometry()
 	for (int i = 0; i < sphere.Vertices.size(); i++)
 	{
 		sphere_vertices[i].Pos = sphere.Vertices[i].Position;
-		//sphere_vertices[i].Color = DirectX::XMFLOAT4(DirectX::Colors::Green);
 		sphere_vertices[i].Normal = sphere.Vertices[i].Normal;
 		sphere_vertices[i].TexC = sphere.Vertices[i].TexC;
 	}
@@ -764,7 +797,6 @@ void QDirect3D12Widget::BuildMultiGeometry()
 	for (int i = 0; i < cylinder.Vertices.size(); i++)
 	{
 		cylinder_vertices[i].Pos = cylinder.Vertices[i].Position;
-		//cylinder_vertices[i].Color = DirectX::XMFLOAT4(DirectX::Colors::Blue);
 		cylinder_vertices[i].Normal = cylinder.Vertices[i].Normal;
 		cylinder_vertices[i].TexC = cylinder.Vertices[i].TexC;
 	}
@@ -774,12 +806,6 @@ void QDirect3D12Widget::BuildMultiGeometry()
 	helper.PushSubmeshGeometry("cylinder", cylinder_vertices, cylinder.GetIndices16());
 	RIManager.AddGeometry("pillar", helper.CreateMeshGeometry("pillar"));
 
-	BuildRenderItem();
-}
-
-void QDirect3D12Widget::BuildRenderItem()
-{
-	UINT fllowObjCBIndex = 0;//接下去的几何体常量数据在CB中的索引从2开始
 	//将圆柱和圆的实例模型存入渲染项中
 	for (int i = 0; i < 5; i++)
 	{
@@ -808,73 +834,6 @@ void QDirect3D12Widget::BuildRenderItem()
 		XMStoreFloat4x4(&(rightSphereRitem->World), rightSphereWorld);
 	}
 }
-//void QDirect3D12Widget::BuildBoxGeometry()
-//{
-//	std::array<Geometry::Vertex, 8> vertices =
-//	{
-//		Geometry::Vertex({ XMFLOAT3(-1.0f, -1.0f, -1.0f),
-//		XMFLOAT4(Colors::White) }),
-//		Geometry::Vertex({ XMFLOAT3(-1.0f, +1.0f, -1.0f),
-//		XMFLOAT4(Colors::Black) }),
-//		Geometry::Vertex({ XMFLOAT3(+1.0f, +1.0f, -1.0f),
-//		XMFLOAT4(Colors::Red) }),
-//		Geometry::Vertex({ XMFLOAT3(+1.0f, -1.0f, -1.0f),
-//		XMFLOAT4(Colors::Green) }),
-//		Geometry::Vertex({ XMFLOAT3(-1.0f, -1.0f, +1.0f),
-//		XMFLOAT4(Colors::Blue) }),
-//		Geometry::Vertex({ XMFLOAT3(-1.0f, +1.0f, +1.0f),
-//		XMFLOAT4(Colors::Yellow) }),
-//		Geometry::Vertex({ XMFLOAT3(+1.0f, +1.0f, +1.0f),
-//		XMFLOAT4(Colors::Cyan) }),
-//		Geometry::Vertex({ XMFLOAT3(+1.0f, -1.0f, +1.0f),
-//		XMFLOAT4(Colors::Magenta) })
-//	};
-//	std::array<std::uint16_t, 36> indices =
-//	{
-//		// front face
-//		0, 1, 2,
-//		0, 2, 3,
-//		// back face
-//		4, 6, 5,
-//		4, 7, 6,
-//		// left face
-//		4, 5, 1,
-//		4, 1, 0,
-//		// right face
-//		3, 2, 6,
-//		3, 6, 7,
-//		// top face
-//		1, 5, 6,
-//		1, 6, 2,
-//		// bottom face
-//		4, 0, 3,
-//		4, 3, 7
-//	};
-//
-//	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Geometry::Vertex);
-//	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
-//
-//	mMultiGeo = std::make_unique<Geometry::MeshGeometry>();
-//	mMultiGeo->Name = "boxGeo";
-//
-//	ThrowIfFailed(D3DCreateBlob(vbByteSize, &mMultiGeo -> VertexBufferCPU));
-//	CopyMemory(mMultiGeo->VertexBufferCPU -> GetBufferPointer(), vertices.data(), vbByteSize);
-//	ThrowIfFailed(D3DCreateBlob(ibByteSize, &mMultiGeo -> IndexBufferCPU));
-//	CopyMemory(mMultiGeo->IndexBufferCPU -> GetBufferPointer(), indices.data(), ibByteSize);
-//
-//	mMultiGeo->VertexBufferGPU = CreateDefaultBuffer(vbByteSize, vertices.data(), mMultiGeo->VertexBufferUploader);
-//	mMultiGeo->IndexBufferGPU = CreateDefaultBuffer(ibByteSize, indices.data(), mMultiGeo->IndexBufferUploader);
-//	mMultiGeo->VertexByteStride = sizeof(Geometry::Vertex);
-//	mMultiGeo->VertexBufferByteSize = vbByteSize;
-//	mMultiGeo->IndexFormat = DXGI_FORMAT_R16_UINT;
-//	mMultiGeo->IndexBufferByteSize = ibByteSize;
-//
-//	Geometry::SubmeshGeometry submesh;
-//	submesh.IndexCount = (UINT)indices.size();
-//	submesh.StartIndexLocation = 0;
-//	submesh.BaseVertexLocation = 0;
-//	mMultiGeo->DrawArgs["box"] = submesh;
-//}
 
 void QDirect3D12Widget::BuildPSO()
 {

@@ -107,10 +107,8 @@ private:
     // ------------------------
     void BuildBoxGeometry(); 
     void BuildMultiGeometry();
-    void BuildRenderItem();
     void BuildPSO();
     void DrawRenderItems(RenderQueue queue);
-    void DrawRenderItems2();
     void BuildLandGeometry();
     void BuildLakeGeometry();
     void BuildMaterial();

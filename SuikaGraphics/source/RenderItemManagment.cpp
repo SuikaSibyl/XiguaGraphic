@@ -52,6 +52,7 @@ void RenderItemManager::CreateTextureSRV()
 		ptr_d3dWidget->m_d3dDevice->CreateShaderResourceView(mTextures[name]->Resource.Get(), &srvDesc, hDescriptor);
 	}
 }
+
 std::unique_ptr<MeshGeometry> MeshGeometryHelper::CreateMeshGeometry(string name)
 {
 	std::unique_ptr<MeshGeometry> geometry = std::make_unique<MeshGeometry>();

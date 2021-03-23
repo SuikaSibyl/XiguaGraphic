@@ -1,5 +1,6 @@
 #include <TextureHelper.h>
 #include <QDirect3D12Widget.h>
+#include <Utility.h>
 
 using namespace IMG;
 
@@ -34,7 +35,7 @@ std::unique_ptr<Texture> TextureHelper::CreateCubemapTexture(std::string name, s
 		Tex->Filename = L"./Resource/Textures/" + prename;
 		CubemapImage image = ImageHelper::ReadCubemapPic(Tex->Filename, postfix);
 		// Summarize the size of v&i
-		const UINT  pixel_data_size = (UINT)image.pixels.size() * sizeof(Color4<uint8_t>) * 6;
+		const UINT  pixel_data_size = (UINT)image.sub_pixels[0].size() * sizeof(Color4<uint8_t>) * 6;
 
 		//为Texture生成Resource
 		D3D12_RESOURCE_DESC texDesc;
@@ -50,6 +51,8 @@ std::unique_ptr<Texture> TextureHelper::CreateCubemapTexture(std::string name, s
 		texDesc.SampleDesc.Quality = 0;
 		texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 		texDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+		UINT num2DSubresources = texDesc.DepthOrArraySize * texDesc.MipLevels;
 
 		//默认堆
 		// 创建默认堆。纹理资源的堆分很多种类型，默认堆，上传堆，默认堆上的纹理资源权限是GPUAvailable，CPUUnAvailable的。
@@ -68,9 +71,9 @@ std::unique_ptr<Texture> TextureHelper::CreateCubemapTexture(std::string name, s
 		));
 
 		//获取footprint
-		D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
+		D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint[6];
 		UINT64  total_bytes = 0;
-		m_d3dDevice->GetCopyableFootprints(&texDesc, 0, 1, 0, &footprint, nullptr, nullptr, &total_bytes);
+		m_d3dDevice->GetCopyableFootprints(&texDesc, 0, texDesc.DepthOrArraySize, 0, footprint, nullptr, nullptr, &total_bytes);
 
 		//为UploadTexture创建资源
 		D3D12_RESOURCE_DESC uploadTexDesc;
@@ -100,13 +103,17 @@ std::unique_ptr<Texture> TextureHelper::CreateCubemapTexture(std::string name, s
 
 		//m_CommandList->CopyTextureRegion(&dest, 0, 0, 0, &src, nullptr);
 
-		D3D12_SUBRESOURCE_DATA subResourceData = {};
-		subResourceData.pData = image.pixels.data();
-		subResourceData.RowPitch = image.header.width * sizeof(Color4<uint8_t>);
-		subResourceData.SlicePitch = pixel_data_size;
-
-		//核心函数UpdateSubresources，将数据从CPU内存拷贝至上传堆，再从上传堆拷贝至默认堆。1是最大的子资源的下标（模板中定义，意为有2个子资源）
-		UpdateSubresources<1>(m_CommandList, Tex->Resource.Get(), Tex->UploadHeap.Get(), 0, 0, 1, &subResourceData);
+		D3D12_SUBRESOURCE_DATA subResourceDatas = {};
+		subResourceDatas.RowPitch = image.header.width * sizeof(Color4<uint8_t>);
+		subResourceDatas.SlicePitch = pixel_data_size / 6;
+		////核心函数UpdateSubresources，将数据从CPU内存拷贝至上传堆，再从上传堆拷贝至默认堆。1是最大的子资源的下标（模板中定义，意为有2个子资源）
+		//UpdateSubresources<6>(m_CommandList, Tex->Resource.Get(), Tex->UploadHeap.Get(), 0, 0, num2DSubresources, &subResourceDatas);
+		// Use Heap-allocating UpdateSubresources implementation for variable number of subresources (which is the case for textures).
+		for (int i = 0; i < 6; i++)
+		{
+			subResourceDatas.pData = image.sub_pixels[i].data();
+			UpdateSubresources(m_CommandList, Tex->Resource.Get(), Tex->UploadHeap.Get(), footprint[i].Offset, i, 1, &subResourceDatas);
+		}
 
 		//插入资源屏障
 		D3D12_RESOURCE_BARRIER barrier;
@@ -231,10 +238,10 @@ std::unique_ptr<Texture> TextureHelper::CreateTexture(std::string name, std::wst
 		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
 		m_CommandList->ResourceBarrier(1, &barrier);
 	}
-	else if (postfix == L"bmp")
+	else
 	{
 		Tex->Filename = L"./Resource/Textures/" + filepath;
-		Image image = ImageHelper::ReadPic(Tex->Filename);
+		Image image = ImageHelper::ReadPic(Tex->Filename, postfix);
 		// Summarize the size of v&i
 		const UINT  pixel_data_size = (UINT)image.pixels.size() * sizeof(Color4<uint8_t>);
 

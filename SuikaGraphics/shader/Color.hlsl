@@ -105,6 +105,8 @@ float4 PS(VertexOut pin) : SV_Target
     float roughness =   0.2;
     float ao      =   0;
 
+    float4 skyCol = gCubeMap.Sample(gSamPointWrap, -V);
+
     float3 Lo = float3(0.0,0.0,0.0);
 
     for(int i=0;i<4;i++)

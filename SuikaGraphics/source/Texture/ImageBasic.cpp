@@ -11,56 +11,85 @@ void ImageHelper::ImageHelper::CreatePic()
 	img.display("My first image");
 }
 
-Image ImageHelper::ImageHelper::ReadPic(std::wstring path)
+Image ImageHelper::ImageHelper::ReadPic(std::wstring path, std::wstring postfix)
 {
-	CImg<uint8_t> ReadTexture(wstring2string(path).c_str());
-
-	Image res;
-	res.header.height = ReadTexture.height();
-	res.header.width = ReadTexture.width();
-	res.header.depth = ReadTexture.depth();
-	res.header.mipMapCount = 0;
-	res.header.rgbaChanelNums = ReadTexture.spectrum();
-	res.header.size = ReadTexture.size();
-
-	vector<Color3<uint8_t>> ReadTextureBulkData;
-	vector<Color4<uint8_t>> InitTextureBulkData;
-
-	cimg_forXY(ReadTexture, x, y)
+	if (postfix == L"jpg" || postfix == L"png")
 	{
-		Color3<uint8_t> NewColor;
-		NewColor.R = ReadTexture(x, y, 0);
-		NewColor.G = ReadTexture(x, y, 1);
-		NewColor.B = ReadTexture(x, y, 2);
-		ReadTextureBulkData.push_back(std::move(NewColor));
-	}
+		stbi_set_flip_vertically_on_load(true);
+		int width, height, nrComponents;
+		unsigned char* data = stbi_load(wstring2string(path).c_str(), &width, &height, &nrComponents, 3);
 
-	for (int i = 0; i < ReadTextureBulkData.size(); i++)
+		if (data)
+		{
+			Image res;
+			res.header.height = height;
+			res.header.width = width;
+			res.header.depth = 1;
+			res.header.mipMapCount = 0;
+			res.header.rgbaChanelNums = nrComponents;
+			res.header.size = height * width * nrComponents;
+
+			vector<Color4<uint8_t>> InitTextureBulkData;
+
+			for (int h = 0; h < width; h++)
+			{
+				for (int w = 0; w < height; w++)
+				{
+					Color4<uint8_t> NewColor;
+					NewColor.R = data[3 * width * h + 3 * w + 0];
+					NewColor.G = data[3 * width * h + 3 * w + 1];
+					NewColor.B = data[3 * width * h + 3 * w + 2];
+					NewColor.A = 255;
+					InitTextureBulkData.push_back(std::move(NewColor));
+				}
+			}
+
+			res.pixels = std::move(InitTextureBulkData);
+			stbi_image_free(data);
+			return  std::move(res);
+		}
+	}
+	else
 	{
-		Color4<uint8_t> NewColor;
-		NewColor.R = ReadTextureBulkData[i].R;
-		NewColor.G = ReadTextureBulkData[i].G;
-		NewColor.B = ReadTextureBulkData[i].B;
-		NewColor.A = 255;
-		InitTextureBulkData.push_back(NewColor);
-	}
+		CImg<uint8_t> ReadTexture(wstring2string(path).c_str());
 
-	res.pixels = std::move(InitTextureBulkData);
-	return  std::move(res);
+		Image res;
+		res.header.height = ReadTexture.height();
+		res.header.width = ReadTexture.width();
+		res.header.depth = ReadTexture.depth();
+		res.header.mipMapCount = 0;
+		res.header.rgbaChanelNums = ReadTexture.spectrum();
+		res.header.size = ReadTexture.size();
+
+		vector<Color4<uint8_t>> InitTextureBulkData;
+
+		cimg_forXY(ReadTexture, x, y)
+		{
+			Color4<uint8_t> NewColor;
+			NewColor.R = ReadTexture(x, y, 0);
+			NewColor.G = ReadTexture(x, y, 1);
+			NewColor.B = ReadTexture(x, y, 2);
+			NewColor.A = 255;
+			InitTextureBulkData.push_back(NewColor);
+		}
+
+		res.pixels = std::move(InitTextureBulkData);
+		return  std::move(res);
+	}
 }
 
 CubemapImage ImageHelper::ReadCubemapPic(std::wstring prename, std::wstring postfix)
 {
 	// Load all six pictures
 	bool load_success = true;
-	stbi_set_flip_vertically_on_load(true);
+	stbi_set_flip_vertically_on_load(false);
 	int width, height, nrComponents;
-	float* datas[6];
+	unsigned char* datas[6];
 	wstring index[6] = { L"1", L"2", L"3", L"4", L"5", L"6" };
 	for (int i = 0; i < 6; i++)
 	{
 		std::wstring path = prename + L"_" + index[i] + L"." + postfix;
-		datas[i] = stbi_loadf(wstring2string(path).c_str(), &width, &height, &nrComponents, 0);
+		datas[i] = stbi_load(wstring2string(path).c_str(), &width, &height, &nrComponents, 3);
 		load_success &= (datas[i] != nullptr);
 	}
 
@@ -75,36 +104,24 @@ CubemapImage ImageHelper::ReadCubemapPic(std::wstring prename, std::wstring post
 		res.header.rgbaChanelNums = nrComponents;
 		res.header.size = height * width * nrComponents;
 
-		vector<Color3<uint8_t>> ReadTextureBulkData;
-		vector<Color4<uint8_t>> InitTextureBulkData;
-
 		for (int i = 0; i < 6; i++)
 		{
+			vector<Color4<uint8_t>> InitTextureBulkData;
 			for (int h = 0; h < height; h++)
 			{
 				for (int w = 0; w < width; w++)
 				{
-					Color3<uint8_t> NewColor;
-					NewColor.R = ((unsigned char*)datas[i])[3 * width * h + 3 * w + 0];
-					NewColor.G = ((unsigned char*)datas[i])[3 * width * h + 3 * w + 1];
-					NewColor.B = ((unsigned char*)datas[i])[3 * width * h + 3 * w + 2];
-					ReadTextureBulkData.push_back(std::move(NewColor));
+					Color4<uint8_t> NewColor;
+					NewColor.R = (datas[i])[3 * width * h + 3 * w + 0];
+					NewColor.G = (datas[i])[3 * width * h + 3 * w + 1];
+					NewColor.B = (datas[i])[3 * width * h + 3 * w + 2];
+					NewColor.A = 255;
+					InitTextureBulkData.push_back(std::move(NewColor));
 				}
 			}
 			stbi_image_free(datas[i]);
+			res.sub_pixels[i] = std::move(InitTextureBulkData);
 		}
-
-		for (int i = 0; i < ReadTextureBulkData.size(); i++)
-		{
-			Color4<uint8_t> NewColor;
-			NewColor.R = ReadTextureBulkData[i].R;
-			NewColor.G = ReadTextureBulkData[i].G;
-			NewColor.B = ReadTextureBulkData[i].B;
-			NewColor.A = 1;
-			InitTextureBulkData.push_back(NewColor);
-		}
-
-		res.pixels = std::move(InitTextureBulkData);
 		return  std::move(res);
 	}
 
@@ -128,29 +145,19 @@ HDRImage ImageHelper::ReadHDRPic(std::wstring path)
 		res.header.rgbaChanelNums = nrComponents;
 		res.header.size = height * width * nrComponents;
 
-		vector<Color3<float>> ReadTextureBulkData;
 		vector<Color4<float>> InitTextureBulkData;
 
 		for (int h = 0; h < height; h++)
 		{
 			for (int w = 0; w < width; w++)
 			{
-				Color3<float> NewColor;
+				Color4<float> NewColor;
 				NewColor.R = data[3 * width * h + 3 * w + 0];
 				NewColor.G = data[3 * width * h + 3 * w + 1];
 				NewColor.B = data[3 * width * h + 3 * w + 2];
-				ReadTextureBulkData.push_back(std::move(NewColor));
+				NewColor.A = 1;
+				InitTextureBulkData.push_back(std::move(NewColor));
 			}
-		}
-
-		for (int i = 0; i < ReadTextureBulkData.size(); i++)
-		{
-			Color4<float> NewColor;
-			NewColor.R = ReadTextureBulkData[i].R;
-			NewColor.G = ReadTextureBulkData[i].G;
-			NewColor.B = ReadTextureBulkData[i].B;
-			NewColor.A = 1;
-			InitTextureBulkData.push_back(NewColor);
 		}
 
 		res.pixels = std::move(InitTextureBulkData);
