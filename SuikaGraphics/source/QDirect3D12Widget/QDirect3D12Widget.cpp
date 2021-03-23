@@ -292,6 +292,10 @@ void QDirect3D12Widget::Draw()
 	m_CommandList->SetPipelineState(RIManager.mPSOs["transparent"].Get());
 	DrawRenderItems(RenderQueue::Transparent);
 
+	//绘制渲染项
+	m_CommandList->SetPipelineState(RIManager.mPSOs["Skybox"].Get());
+	DrawRenderItems(RenderQueue::Skybox);
+
 	// Indicate a state transition on the resource usage.
 	// 等到渲染完成，我们要将后台缓冲区的状态改成呈现状态，使其之后推到前台缓冲区显示。完了，关闭命令列表，等待传入命令队列。
 	m_CommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_SwapChainBuffer[ref_mCurrentBackBuffer].Get(),
@@ -640,9 +644,9 @@ void QDirect3D12Widget::BuildTexture()
 	RIManager.PushTexture("brick", L"bricks.dds");
 	RIManager.PushTexture("water", L"water1.dds");
 	RIManager.PushTexture("test", L"test.bmp");
-	RIManager.PushTexture("env", L"03-Ueno-Shrine_3k.hdr");
+	RIManager.PushTexture("ueno", L"03-Ueno-Shrine_3k.hdr");
+	RIManager.PushTexture("env", L"03-Ueno-Shrine_Env.hdr");
 	RIManager.PushTexture("cubeenv", L"Cubemaps\\skybox\\sky.jpg", true);
-	//RIManager.PushTexture("cubeenv", L"Cubemaps\\sunsetcube1024.dds", true);
 	
 	//然后创建SRV堆
 	D3D12_DESCRIPTOR_HEAP_DESC srvDescriptorHeapDesc;
@@ -685,7 +689,7 @@ void QDirect3D12Widget::BuildMaterial()
 	RIManager.mMaterials["water"] = std::move(water);
 	RIManager.mMaterials["sky"] = std::move(sky);
 
-	RIManager.SetTexture("grass", "env");
+	RIManager.SetTexture("grass", "grass");
 	RIManager.SetTexture("water", "water");
 	RIManager.SetTexture("sky", "cubeenv");
 }
@@ -757,7 +761,8 @@ void QDirect3D12Widget::BuildRootSignature()
 
 void QDirect3D12Widget::BuildShadersAndInputLayout()
 {
-	mpShader = new Shader(m_d3dDevice);
+	RIManager.mShaders["common"] = std::make_unique<Shader>(m_d3dDevice, L"Color");
+	RIManager.mShaders["skybox"] = std::make_unique<Shader>(m_d3dDevice, L"Skybox");
 }
 
 void QDirect3D12Widget::BuildBoxGeometry()
@@ -776,7 +781,7 @@ void QDirect3D12Widget::BuildBoxGeometry()
 	MeshGeometryHelper helper(this);
 	helper.PushSubmeshGeometry("cube", box_vertices, box.GetIndices16());
 	RIManager.AddGeometry("cube", helper.CreateMeshGeometry("cube"));
-	RenderItem* skyboxRitem = RIManager.AddRitem("cube", "cube", RenderQueue::Opaque);
+	RenderItem* skyboxRitem = RIManager.AddRitem("cube", "cube", RenderQueue::Skybox);
 	skyboxRitem->material = RIManager.mMaterials["grass"].get();
 }
 
@@ -839,17 +844,17 @@ void QDirect3D12Widget::BuildPSO()
 {
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaquePsoDesc;
 	ZeroMemory(&opaquePsoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
-	opaquePsoDesc.InputLayout = mpShader->GetInputLayout();
+	opaquePsoDesc.InputLayout = RIManager.mShaders["common"]->GetInputLayout();
 	opaquePsoDesc.pRootSignature = mRootSignature.Get();
 	opaquePsoDesc.VS =
 	{
-		reinterpret_cast<BYTE*>(mpShader->vsBytecode->GetBufferPointer()),
-			mpShader->vsBytecode->GetBufferSize()
+		reinterpret_cast<BYTE*>(RIManager.mShaders["common"]->vsBytecode->GetBufferPointer()),
+			RIManager.mShaders["common"]->vsBytecode->GetBufferSize()
 	};
 	opaquePsoDesc.PS =
 	{
-		reinterpret_cast<BYTE*>(mpShader->psBytecode->GetBufferPointer()),
-			mpShader->psBytecode->GetBufferSize()
+		reinterpret_cast<BYTE*>(RIManager.mShaders["common"]->psBytecode->GetBufferPointer()),
+			RIManager.mShaders["common"]->psBytecode->GetBufferSize()
 	};
 	opaquePsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
 	opaquePsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
@@ -868,8 +873,8 @@ void QDirect3D12Widget::BuildPSO()
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC alphaTestPsoDesc = opaquePsoDesc;//使用不透明物体的PSO初始化
 	alphaTestPsoDesc.PS =
 	{
-		reinterpret_cast<BYTE*>(mpShader->psBytecodeAlphaTest->GetBufferPointer()),
-		mpShader->psBytecodeAlphaTest->GetBufferSize()
+		reinterpret_cast<BYTE*>(RIManager.mShaders["common"]->psBytecodeAlphaTest->GetBufferPointer()),
+		RIManager.mShaders["common"]->psBytecodeAlphaTest->GetBufferSize()
 	};
 	alphaTestPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;//双面显示
 	ThrowIfFailed(m_d3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc,
@@ -894,6 +899,22 @@ void QDirect3D12Widget::BuildPSO()
 
 	ThrowIfFailed(m_d3dDevice->CreateGraphicsPipelineState(&transparentPsoDesc,
 		IID_PPV_ARGS(&RIManager.mPSOs["transparent"])));
+
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC skySpherePsoDesc = opaquePsoDesc;
+	skySpherePsoDesc.VS =
+	{
+		reinterpret_cast<BYTE*>(RIManager.mShaders["skybox"]->vsBytecode->GetBufferPointer()),
+		RIManager.mShaders["skybox"]->vsBytecode->GetBufferSize()
+	};
+	skySpherePsoDesc.PS =
+	{
+		reinterpret_cast<BYTE*>(RIManager.mShaders["skybox"]->psBytecode->GetBufferPointer()),
+		RIManager.mShaders["skybox"]->psBytecode->GetBufferSize()
+	}; 
+	skySpherePsoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+	skySpherePsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	ThrowIfFailed(m_d3dDevice->CreateGraphicsPipelineState(&skySpherePsoDesc,
+		IID_PPV_ARGS(&RIManager.mPSOs["Skybox"])));
 }
 
 void QDirect3D12Widget::BuildFrameResources()

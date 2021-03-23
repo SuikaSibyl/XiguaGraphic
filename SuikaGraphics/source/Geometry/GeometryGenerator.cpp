@@ -168,6 +168,7 @@ GeometryGenerator::MeshData GeometryGenerator::CreateCube()
 		XMFLOAT3(+1.0f, +1.0f, +1.0f), XMFLOAT3(+1.0f, -1.0f, +1.0f),
 	};
 
+
 	uint32 indices[36] =
 	{
 		// front face

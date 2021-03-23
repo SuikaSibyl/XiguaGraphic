@@ -1,64 +1,4 @@
-#include "LightingUtils.hlsl"
-#include "PBR.hlsl"
-#define MaxLights 16
-
-struct MaterialData
-{
-    float4 gDiffuseAlbedo; //材质反照率
-    float3 gFresnelR0; //RF(0)值，即材质的反射属性
-    float gRoughness; //材质的粗糙度
-    float4x4 gMatTransform; //UV动画变换矩阵
-    uint gDiffuseMapIndex;//纹理数组索引
-    uint gMatPad0;
-    uint gMatPad1;
-    uint gMatPad2;
-};
-
-TextureCube gCubeMap : register(t0);
-// An array of textures, which is only supported in shader model 5.1+.
-// Unlike Texture2DArray, the textures in this array can be different
-// sizes and formats, making it more flexible than texture arrays.
-Texture2D gDiffuseMap[4] : register(t1);//所有漫反射贴图
-
-// Put in space1, so the texture array does not overlap with these.
-// The texture array above will occupy registers t0, t1, …, t6 in
-// space0.
-//材质数据的结构化缓冲区，使用t0的space1空间
-StructuredBuffer<MaterialData> gMaterialData : register(t0, space1);
-
-//6个不同类型的采样器
-SamplerState gSamPointWrap : register(s0);
-SamplerState gSamPointClamp : register(s1);
-SamplerState gSamLinearWarp : register(s2);
-SamplerState gSamLinearClamp : register(s3);
-SamplerState gSamAnisotropicWarp : register(s4);
-SamplerState gSamAnisotropicClamp : register(s5);
-
-cbuffer cbPerObject : register(b0)
-{
-	float4x4 gWorld;
-	float4x4 gTexTrans;
-    uint materialIndex;
-    uint pad1;
-    uint pad2;
-    uint pad3;
-};
-
-cbuffer cbPass : register(b1)
-{
-	float4x4 gViewProj;
-	float3 gEyePosW;
-	float gTime;
-	float4 gAmbientLight;
-	Light gLights[MaxLights];
-};
-
-struct VertexIn
-{
-	float3 PosL  : POSITION;
-    float3 Normal : NORMAL;
-    float2 TexC : TEXCOORD;
-};
+#include "Common.hlsl"
 
 struct VertexOut
 {
@@ -91,6 +31,12 @@ VertexOut VS(VertexIn vin)
     return vout;
 }
 
+float4 getCubeMap(float3 direction)
+{
+    float2 uv = SampleSphericalMap(normalize(direction)); // make sure to normalize localPos
+    return gDiffuseMap[6].Sample(gSamPointWrap, uv);
+}
+
 float4 PS(VertexOut pin) : SV_Target
 {
     MaterialData matData = gMaterialData[materialIndex];
@@ -115,7 +61,7 @@ float4 PS(VertexOut pin) : SV_Target
         float3 H = normalize(V + L);
         
         float distance    = length(gLights[i].Position - pin.WorldPos);
-        float attenuation = 1.0;// / (distance * distance);
+        float attenuation = 1.0 / (distance * distance);
         float3 radiance   = gLights[i].Strength * attenuation; 
         
         float3 F  = FresnelSchlick(metallic, albedo.rgb, H, V);
@@ -135,7 +81,13 @@ float4 PS(VertexOut pin) : SV_Target
         Lo += (kD * albedo / PI + specular) * radiance * NdotL;
     }
     
-    float3 ambient = float3(0.03, 0.03, 0.03) * albedo * ao;
+    float3 F0 = float3(0.04,0.04,0.04); 
+    float3 Ks = fresnelSchlick(max(dot(N, V), 0.0), F0);
+    float3 Kd = 1.0 - Ks;
+    float3 irradiance = getCubeMap(N);
+    float3 diffuse    = irradiance * albedo;
+    float3 ambient    = (Kd * diffuse) * 1; 
+    // float3 ambient = float3(0.03, 0.03, 0.03) * albedo * ao;
     float3 color   = ambient + Lo;
 
 #ifdef ALPHA_TEST
@@ -153,5 +105,5 @@ float4 PS(VertexOut pin) : SV_Target
     // float s = saturate((distPosToEye) * 0.001f);
     // float4 finalCol = lerp(diffuseAlbedo, dark, s);
 
-    return float4(ReinhardHDR(albedo), 1.0);
+    return float4(ReinhardHDR(color), 1.0);
 }

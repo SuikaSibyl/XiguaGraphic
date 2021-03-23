@@ -10,6 +10,7 @@
 #include <Light.h>
 #include <Texture.h>
 #include <TextureHelper.h>
+#include <Shader.h>
 
 class QDirect3D12Widget;
 
@@ -24,6 +25,7 @@ enum RenderQueue
 	Opaque,
 	AlphaTest,
 	Transparent,
+	Skybox,
 };
 
 class RenderItemManager
@@ -43,6 +45,7 @@ public:
 	std::unordered_map<std::string, std::unique_ptr<Light>> mLights;
 	std::unordered_map<std::string, std::unique_ptr<Texture>> mTextures;
 	std::unordered_map<std::string, ComPtr<ID3D12PipelineState>> mPSOs;
+	std::unordered_map<std::string, std::unique_ptr<Shader>> mShaders;
 
 	ComPtr<ID3D12PipelineState> AddPSO(string name)
 	{
