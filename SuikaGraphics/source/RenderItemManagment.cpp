@@ -22,11 +22,18 @@ RenderItem* RenderItemManager::AddRitem(string geo_name, string sub_name, Render
 }
 
 
-void RenderItemManager::PushTexture(std::string name, std::wstring path)
+void RenderItemManager::PushTexture(std::string name, std::wstring path, bool isCubemap)
 {
-	mTextures[name] = helper.CreateTexture(name, path);
+	if (isCubemap)
+	{
+		mTextures[name] = helper.CreateCubemapTexture(name, path);
+		mTextures[name]->isCubeMap = true;
+	}
+	else
+		mTextures[name] = helper.CreateTexture(name, path);
 	mTextures[name]->Index = mTextures.size() - 1;
 }
+
 void RenderItemManager::CreateTextureSRV()
 {
 	for (auto iter = mTextures.begin(); iter != mTextures.end(); iter++)

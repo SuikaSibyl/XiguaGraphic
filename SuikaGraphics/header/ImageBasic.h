@@ -51,12 +51,19 @@ namespace IMG
 		vector<Color4<float>> pixels;
 	};
 
+	struct CubemapImage
+	{
+		ImageHeader header;
+		vector<Color4<uint8_t>> pixels;
+	};
+
 	class ImageHelper
 	{
 	public:
 		static void CreatePic();
 		static Image ReadPic(std::wstring path);
 		static HDRImage ReadHDRPic(std::wstring path);
+		static CubemapImage ReadCubemapPic(std::wstring prename, std::wstring postfix);
 
 	private:
 

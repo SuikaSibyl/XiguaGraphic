@@ -17,6 +17,7 @@ public:
 
 	TextureHelper(QDirect3D12Widget* qd3d);
 
+	std::unique_ptr<Texture> CreateCubemapTexture(std::string name, std::wstring filepath);
 	std::unique_ptr<Texture> CreateTexture(std::string name, std::wstring filepath);
 
 private:

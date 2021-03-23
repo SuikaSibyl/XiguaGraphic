@@ -635,6 +635,7 @@ void QDirect3D12Widget::BuildTexture()
 	RIManager.PushTexture("water", L"water1.dds");
 	RIManager.PushTexture("test", L"test.bmp");
 	RIManager.PushTexture("env", L"03-Ueno-Shrine_3k.hdr");
+	RIManager.PushTexture("cubeenv", L"Cubemaps\\skybox\\sky.jpg", true);
 	
 	//然后创建SRV堆
 	D3D12_DESCRIPTOR_HEAP_DESC srvDescriptorHeapDesc;

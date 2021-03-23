@@ -71,7 +71,7 @@ public:
 		}
 	}
 
-	void PushTexture(std::string name, std::wstring path);
+	void PushTexture(std::string name, std::wstring path, bool isCubemap = false);
 	void CreateTextureSRV();
 	void SetTexture(std::string mat_name, std::string texture_name)
 	{
