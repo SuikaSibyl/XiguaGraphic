@@ -53,6 +53,9 @@ public:
 		m_pInputSystem->AddListeningMem(InputSystem::InputSystem::Pause, this, &Camera::ToggleMode);
 	}
 
+	DirectX::XMFLOAT4X4 mView = MathHelper::Identity4x4();
+	DirectX::XMFLOAT4X4 mProj = MathHelper::Identity4x4();
+
 private:
 	int mLastMousePosx = 0;
 	int mLastMousePosy = 0;

@@ -31,14 +31,15 @@ Image ImageHelper::ImageHelper::ReadPic(std::wstring path, std::wstring postfix)
 
 			vector<Color4<uint8_t>> InitTextureBulkData;
 
-			for (int h = 0; h < width; h++)
+			for (uint32_t h = 0; h < width; h++)
 			{
-				for (int w = 0; w < height; w++)
+				for (uint32_t w = 0; w < height; w++)
 				{
 					Color4<uint8_t> NewColor;
-					NewColor.R = data[3 * width * h + 3 * w + 0];
-					NewColor.G = data[3 * width * h + 3 * w + 1];
-					NewColor.B = data[3 * width * h + 3 * w + 2];
+					uint32_t start = 3 * height * h + 3 * w;
+					NewColor.R = data[start + 0];
+					NewColor.G = data[start + 1];
+					NewColor.B = data[start + 2];
 					NewColor.A = 255;
 					InitTextureBulkData.push_back(std::move(NewColor));
 				}

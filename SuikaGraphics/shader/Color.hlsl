@@ -93,17 +93,6 @@ float4 PS(VertexOut pin) : SV_Target
 #ifdef ALPHA_TEST
     clip(albedo.a - 0.1f);
 #endif
-    // albedo.a = albedo.a*0.7;
-    // float3 worldNormal = normalize(pin.WorldNormal);
-    // float3 worldView = normalize(gEyePosW - pin.WorldPos);
-    // float3 worldPosToEye = gEyePosW - pin.WorldPos;
-    // float distPosToEye = length(gEyePosW - pin.WorldPos);
-    
-    // // return finalCol;
-	// float4 finalColor = float4(gLights[0].Strength,1.0) * ((sin(gTime) + 2) / 2);
-    
-    // float s = saturate((distPosToEye) * 0.001f);
-    // float4 finalCol = lerp(diffuseAlbedo, dark, s);
 
-    return float4(ReinhardHDR(color), 1.0);
+    return float4(ReinhardHDR(color), 0.7);
 }

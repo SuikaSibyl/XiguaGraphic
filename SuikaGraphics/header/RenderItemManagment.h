@@ -39,7 +39,7 @@ public:
 	std::unordered_map<RenderQueue, std::vector<RenderItem*>> mQueueRitems;
 
 	// Render items divided by PSO.
-	std::unordered_map<std::string, std::unique_ptr<Geometry::MeshGeometry>> geometries;
+	std::unordered_map<std::string, std::unique_ptr<Geometry::MeshGeometry>> mGeometries;
 	// Materials
 	std::unordered_map<std::string, std::unique_ptr<Material>> mMaterials;
 	std::unordered_map<std::string, std::unique_ptr<Light>> mLights;
@@ -56,7 +56,7 @@ public:
 
 	void AddGeometry(string name, std::unique_ptr<Geometry::MeshGeometry>& geo)
 	{
-		geometries[name] = std::move(geo);
+		mGeometries[name] = std::move(geo);
 	}
 
 	void AddLight(string name, std::unique_ptr<Light>& light)
@@ -68,7 +68,11 @@ public:
 
 	void DisposeAllUploaders()
 	{
-		for (auto iter = geometries.begin(); iter != geometries.end(); iter++)
+		for (auto iter = mGeometries.begin(); iter != mGeometries.end(); iter++)
+		{
+			iter->second->DisposeUploaders();
+		}
+		for (auto iter = mTextures.begin(); iter != mTextures.end(); iter++)
 		{
 			iter->second->DisposeUploaders();
 		}

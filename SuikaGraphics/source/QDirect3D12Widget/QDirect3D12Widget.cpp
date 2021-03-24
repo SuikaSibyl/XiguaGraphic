@@ -40,28 +40,24 @@ bool QDirect3D12Widget::Initialize()
 	{
 		m_CommandList->Reset(m_DirectCmdListAlloc.Get(), nullptr);
 
+		// Shders
 		BuildShadersAndInputLayout();
-
-		// Texture
+		// Textures
 		BuildTexture();
-		// Material
+		// Materials
 		BuildMaterial();
 		// Geometry Things
-		BuildBoxGeometry();
-		BuildMultiGeometry();
-		BuildLandGeometry();
-		BuildLakeGeometry();
+		BuildGeometry();
+		// Lights
 		BuildLights();
-		
-		// Init Frame Resource
-		// must after all render items pushed;
+		// Init Frame Resource,must after all render items pushed;
 		BuildFrameResources();
-
+		// Build Rootsignature
 		BuildRootSignature();
-		//BuildDescriptorHeaps();
-		//BuildConstantBuffers();
+		// Build PSOs
 		BuildPSO();
 
+		// Start the mission
 		ThrowIfFailed(m_CommandList->Close());
 		ID3D12CommandList* cmdLists[] = { m_CommandList.Get() };
 		m_CommandQueue->ExecuteCommandLists(_countof(cmdLists), cmdLists);
@@ -114,8 +110,8 @@ void QDirect3D12Widget::Update()
 
 	MainCamera.Update();
 	XMMATRIX view = MainCamera.GetViewMatrix();
-	XMStoreFloat4x4(&mView, view);
-	XMMATRIX proj = XMLoadFloat4x4(&mProj);
+	XMStoreFloat4x4(&MainCamera.mView, view);
+	XMMATRIX proj = XMLoadFloat4x4(&MainCamera.mProj);
 
 	XMMATRIX viewProj = view * proj;
 	// Update the constant buffer with the latest worldViewProj matrix.
@@ -146,28 +142,6 @@ void QDirect3D12Widget::Update()
 		}
 	}
 
-	//// Update Material
-	//UploadBuffer<MaterialConstants>* currMaterialCB = mCurrFrameResource -> materialCB.get();
-	//for (auto& e : RIManager.mMaterials)
-	//{
-	//	// Only update the cbuffer data if the constants have changed.If
-	//	// the cbuffer data changes, it needs to be updated for each
-	//	// FrameResource
-	//	Material* mat = e.second.get();
-	//	if (mat->NumFramesDirty > 0)
-	//	{
-	//		XMMATRIX matTransform = XMLoadFloat4x4(&mat -> MatTransform);
-	//		MaterialConstants matConstants;
-	//		matConstants.DiffuseAlbedo = mat->DiffuseAlbedo;
-	//		matConstants.FresnelR0 = mat->FresnelR0;
-	//		matConstants.Roughness = mat->Roughness;
-
-	//		currMaterialCB->CopyData(mat->MatCBIndex, matConstants);
-	//		// Next FrameResource need to be updated too.
-	//		mat->NumFramesDirty--;
-	//	}
-	//}
-
 	// Update Wave
 	auto currWavesVB = mCurrFrameResource -> dynamicVB.get();
 	vector<Vertex>& vertices = wave->helper.GetVertices();
@@ -180,7 +154,7 @@ void QDirect3D12Widget::Update()
 	{
 		currWavesVB->CopyData(i, vertices[i]);
 	}
-	RIManager.geometries["lakeGeo"]->VertexBufferGPU = currWavesVB -> Resource();
+	RIManager.mGeometries["lakeGeo"]->VertexBufferGPU = currWavesVB -> Resource();
 
 	// Update Material
 	auto currMatSB = mCurrFrameResource->materialSB.get();
@@ -446,71 +420,70 @@ void QDirect3D12Widget::ContinueFrames()
 	m_bRenderActive = true;
 }
 
-void QDirect3D12Widget::BuildDescriptorHeaps()
-{
-	UINT objectCount = (UINT)RIManager.mAllRitems.size();//物体总个数（包括实例）
+#pragma region Initialize
 
-	// 创建Descriptor heap, 并创建CBV
-	// 首先创建cbv堆
-	D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc;
-	cbvHeapDesc.NumDescriptors = (objectCount + 1) * frameResourcesCount;
-	cbvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-	cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	cbvHeapDesc.NodeMask = 0;
-	ThrowIfFailed(m_d3dDevice->CreateDescriptorHeap(&cbvHeapDesc, IID_PPV_ARGS(m_cbvHeap.GetAddressOf())));
+void QDirect3D12Widget::BuildShadersAndInputLayout()
+{
+	RIManager.mShaders["common"] = std::make_unique<Shader>(m_d3dDevice, L"Color");
+	RIManager.mShaders["skybox"] = std::make_unique<Shader>(m_d3dDevice, L"Skybox");
 }
 
-void QDirect3D12Widget::BuildConstantBuffers()
+void QDirect3D12Widget::BuildTexture()
 {
-	// Create Object CBV
-	// ----------------------
-	UINT objectCount = (UINT)RIManager.mAllRitems.size();//物体总个数（包括实例）
-	UINT objCBByteSize = Utils::CalcConstantBufferByteSize(sizeof(ObjectConstants));
-	//D3D12_GPU_VIRTUAL_ADDRESS objCbAddress = mObjectCB->Resource()->GetGPUVirtualAddress();
-	//// Offset to the ith object constant buffer in the buffer.
-	//// Here our i = 0.
-	for (int frameIndex = 0; frameIndex < frameResourcesCount; frameIndex++)
-	{
-		for (int i = 0; i < objectCount; i++)
-		{
-			D3D12_GPU_VIRTUAL_ADDRESS objCB_Address;
-			objCB_Address = FrameResourcesArray[frameIndex]->objCB->Resource()->GetGPUVirtualAddress();
-			objCB_Address += i * objCBByteSize;//子物体在常量缓冲区中的地址
-			int heapIndex = objectCount * frameIndex + i;	//CBV堆中的CBV元素索引
-			auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetCPUDescriptorHandleForHeapStart());//获得CBV堆首地址
-			handle.Offset(heapIndex, m_cbv_srv_uavDescriptorSize);	//CBV句柄（CBV堆中的CBV元素地址）
-			//创建CBV描述符
-			D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
-			cbvDesc.BufferLocation = objCB_Address;
-			cbvDesc.SizeInBytes = objCBByteSize;
-			m_d3dDevice->CreateConstantBufferView(&cbvDesc, handle);
-		}
-	}
-
-	// Create Pass CBV
-	// ----------------------
-	UINT passCBByteSize = Utils::CalcConstantBufferByteSize(sizeof(PassConstants));
-
-	for (int frameIndex = 0; frameIndex < frameResourcesCount; frameIndex++)
-	{
-		D3D12_GPU_VIRTUAL_ADDRESS passCbAddress;
-		passCbAddress = FrameResourcesArray[frameIndex]->passCB->Resource()->GetGPUVirtualAddress();;
-		// Offset to the ith object constant buffer in the buffer.
-		// Here our i = 0.
-		int passCbElementIndex = 0;
-		passCbAddress += passCbElementIndex * passCBByteSize;
-
-		int heapIndex = objectCount * frameResourcesCount + frameIndex;
-		auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetCPUDescriptorHandleForHeapStart());
-		handle.Offset(heapIndex, m_cbv_srv_uavDescriptorSize);
-		//创建CBV描述符
-		D3D12_CONSTANT_BUFFER_VIEW_DESC passCbvDesc;
-		passCbvDesc.BufferLocation = passCbAddress;
-		passCbvDesc.SizeInBytes = passCBByteSize;
-		m_d3dDevice->CreateConstantBufferView(&passCbvDesc, handle);
-	}
+	// Texture2D texture
+	RIManager.PushTexture("wood", L"WoodCrate01.dds");
+	RIManager.PushTexture("grass", L"grass.dds");
+	RIManager.PushTexture("brick", L"bricks.dds");
+	RIManager.PushTexture("water", L"water1.dds");
+	RIManager.PushTexture("test", L"test.bmp");
+	RIManager.PushTexture("ueno", L"IBL/Newport_Loft_8k.jpg");
+	RIManager.PushTexture("env", L"IBL/Newport_Loft_Env.hdr");
+	// Cubemap texture
+	RIManager.PushTexture("cubeenv", L"Cubemaps/skybox/sky.jpg", true);
+	// Create SRV
+	RIManager.CreateTextureSRV();
 }
-float GetHeight(float x, float z){
+
+void QDirect3D12Widget::BuildMaterial()
+{
+	std::unique_ptr<Material> grass = std::make_unique<Material>();
+	grass->Name = "grass";
+	grass->MatCBIndex = 0;
+	grass->DiffuseAlbedo = XMFLOAT4(0.2f, 0.6f, 0.6f, 1.0f);
+	grass->FresnelR0 = XMFLOAT3(0.01f, 0.01f, 0.01f);
+	grass->Roughness = 0.125f;
+
+	auto water = std::make_unique<Material>();
+	water->Name = "water";
+	water->MatCBIndex = 1;
+	water->DiffuseAlbedo = XMFLOAT4(0.0f, 0.2f, 0.6f, 1.0f);
+	water->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
+	water->Roughness = 0.0f;
+
+	auto sky = std::make_unique<Material>();
+	sky->Name = "water";
+	sky->MatCBIndex = 2;
+	sky->DiffuseAlbedo = XMFLOAT4(0.0f, 0.2f, 0.6f, 1.0f);
+	sky->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
+	sky->Roughness = 0.0f;
+
+	RIManager.mMaterials["grass"] = std::move(grass);
+	RIManager.mMaterials["water"] = std::move(water);
+	RIManager.mMaterials["sky"] = std::move(sky);
+
+	RIManager.SetTexture("grass", "grass");
+	RIManager.SetTexture("water", "water");
+	RIManager.SetTexture("sky", "cubeenv");
+}
+
+void QDirect3D12Widget::BuildGeometry()
+{
+	BuildBoxGeometry();
+	BuildMultiGeometry();
+	BuildLandGeometry();
+	BuildLakeGeometry();
+}
+float GetHeight(float x, float z) {
 	return 0.3f * (z * sinf(0.1f * x) + x * cosf(0.1f * z));
 }
 
@@ -532,37 +505,6 @@ void QDirect3D12Widget::BuildLandGeometry() {
 		vertices[i].Pos.y = GetHeight(p.x, p.z);
 		vertices[i].Normal = XMFLOAT3(0.0f, 0.0f, 0.0f);
 		vertices[i].TexC = grid.Vertices[i].TexC;
-		// Color the vertex based on its height.
-		//if (vertices[i].Pos.y < -10.0f)
-		//{
-		//	// Sandy beach color.
-		//	vertices[i].Color = XMFLOAT4(1.0f, 0.96f, 0.62f,
-		//		1.0f);
-		//}
-		//else if (vertices[i].Pos.y < 5.0f)
-		//{
-		//	 Light yellow-green.
-		//	vertices[i].Color = XMFLOAT4(0.48f, 0.77f,
-		//		0.46f, 1.0f);
-		//}
-		//else if (vertices[i].Pos.y < 12.0f)
-		//{
-		//	 Dark yellow-green.
-		//	vertices[i].Color = XMFLOAT4(0.1f, 0.48f, 0.19f,
-		//		1.0f);
-		//}
-		//else if (vertices[i].Pos.y < 20.0f)
-		//{
-		//	 Dark brown.
-		//	vertices[i].Color = XMFLOAT4(0.45f, 0.39f,
-		//		0.34f, 1.0f);
-		//}
-		//else
-		//{
-		//	 White snow.
-		//	vertices[i].Color = XMFLOAT4(1.0f, 1.0f, 1.0f,
-		//		1.0f);
-		//}
 	}
 	std::vector<std::uint16_t> indices = grid.GetIndices16();
 
@@ -575,7 +517,7 @@ void QDirect3D12Widget::BuildLandGeometry() {
 	XMStoreFloat4x4(&land->texTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 }
 
-void QDirect3D12Widget::BuildLakeGeometry() 
+void QDirect3D12Widget::BuildLakeGeometry()
 {
 	ProceduralGeometry::GeometryGenerator geoGen;
 	ProceduralGeometry::GeometryGenerator::MeshData grid =
@@ -593,7 +535,7 @@ void QDirect3D12Widget::BuildLakeGeometry()
 		vertices[i].Pos = p;
 		vertices[i].Pos.y = 0.5f;
 		//vertices[i].Color = XMFLOAT4(0.26f, 0.36f, 0.92f, 1.0f);
-		vertices[i].Normal = XMFLOAT3(0,0,0);
+		vertices[i].Normal = XMFLOAT3(0, 0, 0);
 		vertices[i].TexC = grid.Vertices[i].TexC;
 	}
 	std::vector<std::uint16_t> indices = grid.GetIndices16();
@@ -637,62 +579,7 @@ void QDirect3D12Widget::BuildLights()
 	RIManager.AddLight("Light3", light3);
 }
 
-void QDirect3D12Widget::BuildTexture()
-{
-	RIManager.PushTexture("wood", L"WoodCrate01.dds");
-	RIManager.PushTexture("grass", L"grass.dds");
-	RIManager.PushTexture("brick", L"bricks.dds");
-	RIManager.PushTexture("water", L"water1.dds");
-	RIManager.PushTexture("test", L"test.bmp");
-	RIManager.PushTexture("ueno", L"03-Ueno-Shrine_3k.hdr");
-	RIManager.PushTexture("env", L"03-Ueno-Shrine_Env.hdr");
-	RIManager.PushTexture("cubeenv", L"Cubemaps\\skybox\\sky.jpg", true);
-	
-	//然后创建SRV堆
-	D3D12_DESCRIPTOR_HEAP_DESC srvDescriptorHeapDesc;
-	srvDescriptorHeapDesc.NumDescriptors = RIManager.mTextures.size();
-	srvDescriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	srvDescriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-	srvDescriptorHeapDesc.NodeMask = 0;
-	ThrowIfFailed(m_d3dDevice->CreateDescriptorHeap(&srvDescriptorHeapDesc, IID_PPV_ARGS(&m_srvHeap)));
-
-	RIManager.CreateTextureSRV();
-}
-
-void QDirect3D12Widget::BuildMaterial()
-{
-	std::unique_ptr<Material> grass = std::make_unique<Material>();
-	grass->Name = "grass";
-	grass->MatCBIndex = 0;
-	grass->DiffuseAlbedo = XMFLOAT4(0.2f, 0.6f, 0.6f, 1.0f);
-	grass->FresnelR0 = XMFLOAT3(0.01f, 0.01f, 0.01f);
-	grass->Roughness = 0.125f;
-
-	// This is not a good water material definition, but we do not have
-	// all the rendering tools we need (transparency, environment
-	// reflection), so we fake it for now.
-	auto water = std::make_unique<Material>();
-	water->Name = "water";
-	water->MatCBIndex = 1;
-	water->DiffuseAlbedo = XMFLOAT4(0.0f, 0.2f, 0.6f, 1.0f);
-	water->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
-	water->Roughness = 0.0f;
-
-	auto sky = std::make_unique<Material>();
-	sky->Name = "water";
-	sky->MatCBIndex = 2;
-	sky->DiffuseAlbedo = XMFLOAT4(0.0f, 0.2f, 0.6f, 1.0f);
-	sky->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
-	sky->Roughness = 0.0f;
-
-	RIManager.mMaterials["grass"] = std::move(grass);
-	RIManager.mMaterials["water"] = std::move(water);
-	RIManager.mMaterials["sky"] = std::move(sky);
-
-	RIManager.SetTexture("grass", "grass");
-	RIManager.SetTexture("water", "water");
-	RIManager.SetTexture("sky", "cubeenv");
-}
+#pragma endregion
 
 void QDirect3D12Widget::BuildRootSignature()
 {
@@ -757,12 +644,6 @@ void QDirect3D12Widget::BuildRootSignature()
 		serializedRootSig->GetBufferPointer(),
 		serializedRootSig->GetBufferSize(),
 		IID_PPV_ARGS(&mRootSignature)));
-}
-
-void QDirect3D12Widget::BuildShadersAndInputLayout()
-{
-	RIManager.mShaders["common"] = std::make_unique<Shader>(m_d3dDevice, L"Color");
-	RIManager.mShaders["skybox"] = std::make_unique<Shader>(m_d3dDevice, L"Skybox");
 }
 
 void QDirect3D12Widget::BuildBoxGeometry()
@@ -959,7 +840,7 @@ void QDirect3D12Widget::onResize()
 	// The window resized, so update the aspect ratio and recompute the
 		// projection matrix.
 	XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f * MathHelper::Pi, (float)(width()) / (height()), 1.0f, 1000.0f);
-	XMStoreFloat4x4(&mProj, P);
+	XMStoreFloat4x4(&MainCamera.mProj, P);
 
 	//resizeSwapChain(width(), height());
 	ContinueFrames();
@@ -1529,4 +1410,72 @@ bool QDirect3D12Widget::winEvent(MSG* message, long* result)
 }
 #endif // QT_VERSION >= 0x050000
 
+#pragma endregion
+
+#pragma region Deprecated
+
+//void QDirect3D12Widget::BuildDescriptorHeaps()
+//{
+//	UINT objectCount = (UINT)RIManager.mAllRitems.size();//物体总个数（包括实例）
+//
+//	// 创建Descriptor heap, 并创建CBV
+//	// 首先创建cbv堆
+//	D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc;
+//	cbvHeapDesc.NumDescriptors = (objectCount + 1) * frameResourcesCount;
+//	cbvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+//	cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+//	cbvHeapDesc.NodeMask = 0;
+//	ThrowIfFailed(m_d3dDevice->CreateDescriptorHeap(&cbvHeapDesc, IID_PPV_ARGS(m_cbvHeap.GetAddressOf())));
+//}
+
+//void QDirect3D12Widget::BuildConstantBuffers()
+//{
+//	// Create Object CBV
+//	// ----------------------
+//	UINT objectCount = (UINT)RIManager.mAllRitems.size();//物体总个数（包括实例）
+//	UINT objCBByteSize = Utils::CalcConstantBufferByteSize(sizeof(ObjectConstants));
+//	//D3D12_GPU_VIRTUAL_ADDRESS objCbAddress = mObjectCB->Resource()->GetGPUVirtualAddress();
+//	//// Offset to the ith object constant buffer in the buffer.
+//	//// Here our i = 0.
+//	for (int frameIndex = 0; frameIndex < frameResourcesCount; frameIndex++)
+//	{
+//		for (int i = 0; i < objectCount; i++)
+//		{
+//			D3D12_GPU_VIRTUAL_ADDRESS objCB_Address;
+//			objCB_Address = FrameResourcesArray[frameIndex]->objCB->Resource()->GetGPUVirtualAddress();
+//			objCB_Address += i * objCBByteSize;//子物体在常量缓冲区中的地址
+//			int heapIndex = objectCount * frameIndex + i;	//CBV堆中的CBV元素索引
+//			auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetCPUDescriptorHandleForHeapStart());//获得CBV堆首地址
+//			handle.Offset(heapIndex, m_cbv_srv_uavDescriptorSize);	//CBV句柄（CBV堆中的CBV元素地址）
+//			//创建CBV描述符
+//			D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
+//			cbvDesc.BufferLocation = objCB_Address;
+//			cbvDesc.SizeInBytes = objCBByteSize;
+//			m_d3dDevice->CreateConstantBufferView(&cbvDesc, handle);
+//		}
+//	}
+//
+//	// Create Pass CBV
+//	// ----------------------
+//	UINT passCBByteSize = Utils::CalcConstantBufferByteSize(sizeof(PassConstants));
+//
+//	for (int frameIndex = 0; frameIndex < frameResourcesCount; frameIndex++)
+//	{
+//		D3D12_GPU_VIRTUAL_ADDRESS passCbAddress;
+//		passCbAddress = FrameResourcesArray[frameIndex]->passCB->Resource()->GetGPUVirtualAddress();;
+//		// Offset to the ith object constant buffer in the buffer.
+//		// Here our i = 0.
+//		int passCbElementIndex = 0;
+//		passCbAddress += passCbElementIndex * passCBByteSize;
+//
+//		int heapIndex = objectCount * frameResourcesCount + frameIndex;
+//		auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetCPUDescriptorHandleForHeapStart());
+//		handle.Offset(heapIndex, m_cbv_srv_uavDescriptorSize);
+//		//创建CBV描述符
+//		D3D12_CONSTANT_BUFFER_VIEW_DESC passCbvDesc;
+//		passCbvDesc.BufferLocation = passCbAddress;
+//		passCbvDesc.SizeInBytes = passCBByteSize;
+//		m_d3dDevice->CreateConstantBufferView(&passCbvDesc, handle);
+//	}
+//}
 #pragma endregion

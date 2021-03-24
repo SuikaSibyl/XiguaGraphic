@@ -375,7 +375,5 @@ std::array<CD3DX12_STATIC_SAMPLER_DESC, 6> TextureHelper::GetStaticSamplers()
 		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,	//V方向上的寻址模式为CLAMP（钳位寻址模式）
 		D3D12_TEXTURE_ADDRESS_MODE_CLAMP);	//W方向上的寻址模式为CLAMP（钳位寻址模式）
 
-	IMG::ImageHelper::CreatePic();
-
 	return{ pointWarp, pointClamp, linearWarp, linearClamp, anisotropicWarp, anisotropicClamp };
 }

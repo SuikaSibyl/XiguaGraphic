@@ -94,50 +94,35 @@ protected:
 
 private:
     // ================================================================
-    // ------------------------ BOX APP only --------------------------
+    // ---------------------- Initialize Items ------------------------
     // ================================================================
-    D3D12_VERTEX_BUFFER_VIEW vbv;
-    D3D12_INDEX_BUFFER_VIEW ibv;
-    Shader* mpShader;
-
-    void BuildDescriptorHeaps();
-    void BuildConstantBuffers();
-    void BuildRootSignature();
     void BuildShadersAndInputLayout();
-    // ------------------------
-    void BuildBoxGeometry(); 
-    void BuildMultiGeometry();
+    void BuildTexture();
+    void BuildMaterial();
+    void BuildGeometry();
+    void BuildLights();
+    void BuildFrameResources();
+    void BuildRootSignature();
     void BuildPSO();
     void DrawRenderItems(RenderQueue queue);
+    // ------------------------------------
+    void BuildBoxGeometry(); 
+    void BuildMultiGeometry();
     void BuildLandGeometry();
     void BuildLakeGeometry();
-    void BuildMaterial();
-    void BuildLights();
-    void BuildTexture();
-
-    //Default buffer
-    ComPtr<ID3D12Resource> VertexBufferGPU = nullptr;
-    ComPtr<ID3D12Resource> IndexBufferGPU = nullptr;
-    //Upload buffer
-    ComPtr<ID3D12Resource> VertexBufferUploader = nullptr;
-    ComPtr<ID3D12Resource> IndexBufferUploader = nullptr;
-
+    // ------------------------------------
     ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
-    ComPtr<ID3D12RootSignature> mRootSignature2 = nullptr;
-   /* std::unique_ptr<UploadBuffer<ObjectConstants>> mObjectCB = nullptr;
-    std::unique_ptr<UploadBuffer<PassConstants>> mPassCB = nullptr;*/
-    std::unique_ptr<Geometry::MeshGeometry> mMultiGeo = nullptr;
-    std::vector<std::unique_ptr<Geometry::RenderItem>> RenderItems;
 
-    DirectX::XMFLOAT4X4 mWorld = MathHelper::Identity4x4();
-    DirectX::XMFLOAT4X4 mView = MathHelper::Identity4x4();
-    DirectX::XMFLOAT4X4 mProj = MathHelper::Identity4x4();
-
+    // ================================================================
+    // -------------------- Frame Resource Objects --------------------
+    // ================================================================
     int currFrameResourcesIndex = 0;
-    void BuildFrameResources();
     std::vector<std::unique_ptr<FrameResource>> FrameResourcesArray;
     FrameResource* mCurrFrameResource = nullptr;
 
+    // ================================================================
+    // --------------------- No Important Stuffs ----------------------
+    // ================================================================
     std::unique_ptr<Waves> wave;
     int vertex_num;
 

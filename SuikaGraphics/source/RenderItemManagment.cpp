@@ -8,11 +8,11 @@ RenderItem* RenderItemManager::AddRitem(string geo_name, string sub_name, Render
 	std::unique_ptr<RenderItem> ritem = std::make_unique<RenderItem>();
 	ritem->World = MathHelper::Identity4x4();
 	ritem->ObjCBIndex = mAllRitems.size();
-	ritem->Geo = geometries[geo_name].get();
+	ritem->Geo = mGeometries[geo_name].get();
 	ritem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	ritem->IndexCount = geometries[geo_name]->DrawArgs[sub_name].IndexCount;
-	ritem->BaseVertexLocation = geometries[geo_name]->DrawArgs[sub_name].BaseVertexLocation;
-	ritem->StartIndexLocation = geometries[geo_name]->DrawArgs[sub_name].StartIndexLocation;
+	ritem->IndexCount = mGeometries[geo_name]->DrawArgs[sub_name].IndexCount;
+	ritem->BaseVertexLocation = mGeometries[geo_name]->DrawArgs[sub_name].BaseVertexLocation;
+	ritem->StartIndexLocation = mGeometries[geo_name]->DrawArgs[sub_name].StartIndexLocation;
 
 	mQueueRitems[renderQ].push_back(ritem.get());
 
@@ -36,6 +36,14 @@ void RenderItemManager::PushTexture(std::string name, std::wstring path, bool is
 
 void RenderItemManager::CreateTextureSRV()
 {
+	// Create SRV Heap
+	D3D12_DESCRIPTOR_HEAP_DESC srvDescriptorHeapDesc;
+	srvDescriptorHeapDesc.NumDescriptors = mTextures.size();
+	srvDescriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	srvDescriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	srvDescriptorHeapDesc.NodeMask = 0;
+	ThrowIfFailed(ptr_d3dWidget->m_d3dDevice->CreateDescriptorHeap(&srvDescriptorHeapDesc, IID_PPV_ARGS(&(ptr_d3dWidget->m_srvHeap))));
+
 	for (auto iter = mTextures.begin(); iter != mTextures.end(); iter++)
 	{
 		std::string name = iter->first;
