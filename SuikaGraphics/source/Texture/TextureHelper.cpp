@@ -12,7 +12,7 @@ TextureHelper::TextureHelper(QDirect3D12Widget* qd3d)
 std::unique_ptr<Texture> TextureHelper::CreateCubemapTexture(std::string name, std::wstring filepath)
 {
 	m_d3dDevice = m_qd3dWidget->m_d3dDevice.Get();
-	m_CommandList = m_qd3dWidget->m_CommandList.Get();
+	m_CommandList = m_qd3dWidget->m_CommandList;
 
 	std::unique_ptr<Texture> Tex = std::make_unique<Texture>();
 	Tex->Name = name;
@@ -132,7 +132,7 @@ std::unique_ptr<Texture> TextureHelper::CreateCubemapTexture(std::string name, s
 std::unique_ptr<Texture> TextureHelper::CreateTexture(std::string name, std::wstring filepath)
 {
 	m_d3dDevice = m_qd3dWidget->m_d3dDevice.Get();
-	m_CommandList = m_qd3dWidget->m_CommandList.Get();
+	m_CommandList = m_qd3dWidget->m_CommandList;
 
 	std::unique_ptr<Texture> Tex = std::make_unique<Texture>();
 	Tex->Name = name;

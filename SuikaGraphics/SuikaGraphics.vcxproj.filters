@@ -82,6 +82,12 @@
     <Filter Include="Source Files\Texture">
       <UniqueIdentifier>{22af26d8-6748-4280-ae0a-f9ea41b1d478}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\D3DModules">
+      <UniqueIdentifier>{3542f20f-6e04-49e7-8a57-9dbb085166ce}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\D3DModules">
+      <UniqueIdentifier>{3654d2c0-a074-47a6-8b69-8b04f9d53fc8}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="SuikaGraphics.qrc">
@@ -145,6 +151,9 @@
     </ClCompile>
     <ClCompile Include="source\Texture\TextureHelper.cpp">
       <Filter>Source Files\Texture</Filter>
+    </ClCompile>
+    <ClCompile Include="source\D3DModules\WorksubmissionModule.cpp">
+      <Filter>Source Files\D3DModules</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -225,6 +234,9 @@
     </ClInclude>
     <ClInclude Include="header\ImageBasic.h">
       <Filter>Header Files\Texture</Filter>
+    </ClInclude>
+    <ClInclude Include="header\WorkSubmissionModule.h">
+      <Filter>Header Files\D3DModules</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

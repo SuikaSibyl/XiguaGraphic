@@ -29,6 +29,8 @@
 #include <Camera.h>
 #include <wave.h>
 
+#include <WorkSubmissionModule.h>
+
 using Microsoft::WRL::ComPtr;
 
 class SuikaGraphics;
@@ -155,6 +157,11 @@ private:
     int     mCurrentFence = 0;	    //Initial CPU Fence = 0
 
     // ================================================================
+    // -------------------- D3D Important Module ----------------------
+    // ================================================================
+    std::unique_ptr<D3DModules::WorkSubmissionModule> m_WorkSubmissionModule;
+
+    // ================================================================
     // --------------------- D3D Init Variable ------------------------
     // ================================================================
     ComPtr<ID3D12Device>    m_d3dDevice;
@@ -171,9 +178,9 @@ private:
     DXGI_FORMAT m_BackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
     DXGI_FORMAT m_DepthStencilFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
     // Command Objects
-    ComPtr<ID3D12CommandAllocator>      m_DirectCmdListAlloc;
-    ComPtr<ID3D12CommandQueue>          m_CommandQueue;
-    ComPtr<ID3D12GraphicsCommandList>   m_CommandList;
+    ID3D12CommandAllocator*         m_DirectCmdListAlloc;
+    ID3D12CommandQueue*             m_CommandQueue;
+    ID3D12GraphicsCommandList*      m_CommandList;
     // Resource & Swap Chain
     ComPtr<ID3D12Resource>          m_DepthStencilBuffer;
     ComPtr<ID3D12Resource>          m_SwapChainBuffer[2];

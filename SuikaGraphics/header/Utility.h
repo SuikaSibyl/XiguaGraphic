@@ -29,6 +29,7 @@
 #include <MathHelper.h>
 #include <iostream>
 #include <Delegate.h>
+#include <string.h>
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
@@ -98,3 +99,16 @@ namespace Utils
 {
     UINT CalcConstantBufferByteSize(UINT byteSize);
 }
+
+// ############################################################################
+// ############################## Utils #######################################
+// ############################################################################
+class XGException
+{
+private:
+    std::string message;
+
+public:
+    XGException(std::string str = "A problem") : message{ str } {}
+    std::string what() const { return message; }
+};

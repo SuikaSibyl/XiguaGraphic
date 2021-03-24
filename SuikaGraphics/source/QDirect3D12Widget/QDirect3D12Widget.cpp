@@ -38,7 +38,7 @@ bool QDirect3D12Widget::Initialize()
 
 	try
 	{
-		m_CommandList->Reset(m_DirectCmdListAlloc.Get(), nullptr);
+		m_CommandList->Reset(m_DirectCmdListAlloc, nullptr);
 
 		// Shders
 		BuildShadersAndInputLayout();
@@ -59,7 +59,7 @@ bool QDirect3D12Widget::Initialize()
 
 		// Start the mission
 		ThrowIfFailed(m_CommandList->Close());
-		ID3D12CommandList* cmdLists[] = { m_CommandList.Get() };
+		ID3D12CommandList* cmdLists[] = { m_CommandList };
 		m_CommandQueue->ExecuteCommandLists(_countof(cmdLists), cmdLists);
 
 		// Wait until initialization is complete.
@@ -279,7 +279,7 @@ void QDirect3D12Widget::Draw()
 
 	// Add the command list to the queue for execution.
 	//等CPU将命令都准备好后，需要将待执行的命令列表加入GPU的命令队列。使用的是ExecuteCommandLists函数。
-	ID3D12CommandList* commandLists[] = { m_CommandList.Get() };//声明并定义命令列表数组
+	ID3D12CommandList* commandLists[] = { m_CommandList };//声明并定义命令列表数组
 	m_CommandQueue->ExecuteCommandLists(_countof(commandLists), commandLists);//将命令从命令列表传至命令队列
 
 	// swap the back and front buffers
@@ -940,7 +940,7 @@ ComPtr<ID3D12Resource> QDirect3D12Widget::CreateDefaultBuffer
 			D3D12_RESOURCE_STATE_COPY_DEST));
 
 	//核心函数UpdateSubresources，将数据从CPU内存拷贝至上传堆，再从上传堆拷贝至默认堆。1是最大的子资源的下标（模板中定义，意为有2个子资源）
-	UpdateSubresources<1>(m_CommandList.Get(), defaultBuffer.Get(), uploadBuffer.Get(), 0, 0, 1, &subResourceData);
+	UpdateSubresources<1>(m_CommandList, defaultBuffer.Get(), uploadBuffer.Get(), 0, 0, 1, &subResourceData);
 
 	//再次将资源从COPY_DEST状态转换到GENERIC_READ状态(现在只提供给着色器访问)
 	m_CommandList->ResourceBarrier(1,
@@ -1001,7 +1001,7 @@ bool QDirect3D12Widget::InitDirect3D()
 		CreateViewPortAndScissorRect();
 
 		ThrowIfFailed(m_CommandList->Close());
-		ID3D12CommandList* cmdLists[] = { m_CommandList.Get() };
+		ID3D12CommandList* cmdLists[] = { m_CommandList };
 		m_CommandQueue->ExecuteCommandLists(_countof(cmdLists), cmdLists);
 	}
 	catch (HrException& e)
@@ -1061,29 +1061,17 @@ void QDirect3D12Widget::SetMSAA()
 /// </summary>
 void QDirect3D12Widget::CreateCommandObjects()
 {
-	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
-	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-	queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-
-	DXCall(m_d3dDevice->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&m_CommandQueue)));
-
-	DXCall(m_d3dDevice->CreateCommandAllocator(
-		D3D12_COMMAND_LIST_TYPE_DIRECT,
-		IID_PPV_ARGS(m_DirectCmdListAlloc.GetAddressOf())));
-
-	DXCall(m_d3dDevice->CreateCommandList(
-		0, //掩码值为0，单GPU
-		D3D12_COMMAND_LIST_TYPE_DIRECT, //命令列表类型
-		m_DirectCmdListAlloc.Get(), // Associated command allocator	//命令分配器接口指针
-		nullptr,                   // Initial PipelineStateObject	//流水线状态对象PSO，这里不绘制，所以空指针
-		IID_PPV_ARGS(m_CommandList.GetAddressOf())));	//返回创建的命令列表
+	m_WorkSubmissionModule = std::make_unique<D3DModules::WorkSubmissionModule>(m_d3dDevice.Get());
+	// Create Command Queue
+	m_CommandQueue = m_WorkSubmissionModule->CreateCommandQueue("direct", D3D12_COMMAND_LIST_TYPE_DIRECT);
+	m_DirectCmdListAlloc = m_WorkSubmissionModule->CreateCommandListAllocator("main", D3D12_COMMAND_LIST_TYPE_DIRECT);
+	m_CommandList = m_WorkSubmissionModule->CreateCommandList("main", D3D12_COMMAND_LIST_TYPE_DIRECT, "main");
 
 	// Start off in a closed state.  This is because the first time we refer 
 	// to the command list we will Reset it, and it needs to be closed before
 	// calling Reset.
 	m_CommandList->Close();	//重置命令列表前必须将其关闭
-
-	m_CommandList->Reset(m_DirectCmdListAlloc.Get(), nullptr);
+	m_CommandList->Reset(m_DirectCmdListAlloc, nullptr);
 }
 /// <summary>
 /// Initialize:: 6 Describe and Create Swap Chain
@@ -1110,7 +1098,7 @@ void QDirect3D12Widget::CreateSwapChain()
 	swapChainDesc.BufferCount = 2;	//后台缓冲区数量（双缓冲）
 	swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;	//自适应窗口模式（自动选择最适于当前窗口尺寸的显示模式）
 	//利用DXGI接口下的工厂类创建交换链
-	ThrowIfFailed(m_dxgiFactory->CreateSwapChain(m_CommandQueue.Get(), &swapChainDesc, m_SwapChain.GetAddressOf()));
+	ThrowIfFailed(m_dxgiFactory->CreateSwapChain(m_CommandQueue, &swapChainDesc, m_SwapChain.GetAddressOf()));
 }
 /// <summary>
 /// Initialize:: 7 Create the Descriptor Heaps
