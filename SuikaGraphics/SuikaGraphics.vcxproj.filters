@@ -155,6 +155,9 @@
     <ClCompile Include="source\D3DModules\WorksubmissionModule.cpp">
       <Filter>Source Files\D3DModules</Filter>
     </ClCompile>
+    <ClCompile Include="source\D3DModules\MemoryManagerModule.cpp">
+      <Filter>Source Files\D3DModules</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="header\GameTimer.h">
@@ -236,6 +239,9 @@
       <Filter>Header Files\Texture</Filter>
     </ClInclude>
     <ClInclude Include="header\WorkSubmissionModule.h">
+      <Filter>Header Files\D3DModules</Filter>
+    </ClInclude>
+    <ClInclude Include="source\D3DModules\MemoryManagerModule.h">
       <Filter>Header Files\D3DModules</Filter>
     </ClInclude>
   </ItemGroup>

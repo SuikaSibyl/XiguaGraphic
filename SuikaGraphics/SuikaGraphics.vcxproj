@@ -185,6 +185,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="source\D3DModules\MemoryManagerModule.cpp" />
     <ClCompile Include="source\D3DModules\WorksubmissionModule.cpp" />
     <ClCompile Include="source\GameObject\Camera.cpp" />
     <ClCompile Include="source\Geometry\GeometryGenerator.cpp" />
@@ -223,6 +224,7 @@
     <ClInclude Include="header\Transform.h" />
     <ClInclude Include="header\wave.h" />
     <ClInclude Include="header\WorkSubmissionModule.h" />
+    <ClInclude Include="source\D3DModules\MemoryManagerModule.h" />
     <QtMoc Include="header\SuikaGraphics.h" />
     <ClInclude Include="header\Camera.h" />
     <ClInclude Include="header\d3dx12.h" />
