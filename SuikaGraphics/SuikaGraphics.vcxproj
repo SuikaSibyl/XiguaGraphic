@@ -218,13 +218,13 @@
     <ClInclude Include="header\Interaction.h" />
     <ClInclude Include="header\Light.h" />
     <ClInclude Include="header\Material.h" />
+    <ClInclude Include="header\MemoryManagerModule.h" />
     <ClInclude Include="header\Singleton.h" />
     <ClInclude Include="header\Texture.h" />
     <ClInclude Include="header\TextureHelper.h" />
     <ClInclude Include="header\Transform.h" />
     <ClInclude Include="header\wave.h" />
     <ClInclude Include="header\WorkSubmissionModule.h" />
-    <ClInclude Include="source\D3DModules\MemoryManagerModule.h" />
     <QtMoc Include="header\SuikaGraphics.h" />
     <ClInclude Include="header\Camera.h" />
     <ClInclude Include="header\d3dx12.h" />

@@ -193,43 +193,17 @@ void QDirect3D12Widget::Draw()
 	DXCall(currCmdAllocator->Reset());//重复使用记录命令的相关内存
 	DXCall(m_CommandList->Reset(currCmdAllocator.Get(), RIManager.mPSOs["opaque"].Get()));//复用命令列表及其内存
 
-	// Indicate a state transition on the resource usage.
-	//接着我们将后台缓冲资源从呈现状态转换到渲染目标状态（即准备接收图像渲染）。
-	UINT& ref_mCurrentBackBuffer = mCurrentBackBuffer;
-	m_CommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_SwapChainBuffer[ref_mCurrentBackBuffer].Get(),//转换资源为后台缓冲区资源
-		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));//从呈现到渲染目标转换
-
-	//接下来设置视口和裁剪矩形。
-	m_CommandList->RSSetViewports(1, &viewPort);
-	m_CommandList->RSSetScissorRects(1, &scissorRect);
-
-	// Clear the back buffer and depth buffer.
-	//然后清除后台缓冲区和深度缓冲区，并赋值。步骤是先获得堆中描述符句柄（即地址），再通过ClearRenderTargetView函数和ClearDepthStencilView函数做清除和赋值。这里我们将RT资源背景色赋值为DarkRed（暗红）。
-	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), ref_mCurrentBackBuffer, m_rtvDescriptorSize);
-	float dark[4] = { 0.117,0.117,0.117,1 };
-	m_CommandList->ClearRenderTargetView(rtvHandle, dark, 0, nullptr);//清除RT背景色为暗红，并且不设置裁剪矩形
-	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = m_dsvHeap->GetCPUDescriptorHandleForHeapStart();
-	m_CommandList->ClearDepthStencilView(dsvHandle,	//DSV描述符句柄
-		D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL,	//FLAG
-		1.0f,	//默认深度值
-		0,	//默认模板值
-		0,	//裁剪矩形数量
-		nullptr);	//裁剪矩形指针
-
-	// Specify the buffers we are going to render to. 
-	//mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
-	//然后我们指定将要渲染的缓冲区，即指定RTV和DSV。
-	m_CommandList->OMSetRenderTargets(1,//待绑定的RTV数量
-		&rtvHandle,	//指向RTV数组的指针
-		true,	//RTV对象在堆内存中是连续存放的
-		&dsvHandle);	//指向DSV的指针
+	m_MemoryManagerModule->StartNewFrame();
 
 	//ID3D12DescriptorHeap* descriptorHeaps[] = { m_cbvHeap.Get() };
 	//m_CommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 	m_CommandList->SetGraphicsRootSignature(mRootSignature.Get());
+
+	m_srvHeap = m_MemoryManagerModule->GetMainHeap();
+
 	//设置SRV描述符堆
 	//注意这里之所以是数组，是因为还可能包含SRV和UAV，而这里我们只用到了SRV
-	ID3D12DescriptorHeap* descriptorHeaps[] = { m_srvHeap.Get() };
+	ID3D12DescriptorHeap* descriptorHeaps[] = { m_srvHeap };
 	m_CommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
 	//设置matSB的描述符(因为只绑定一次，所以不需要做地址偏移)
@@ -245,8 +219,8 @@ void QDirect3D12Widget::Draw()
 	//		auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
 	//		handle.Offset(passCbvIndex, m_cbv_srv_uavDescriptorSize);
 	//		m_CommandList->SetGraphicsRootDescriptorTable(1, //根参数的起始索引 handle);
-
-	//设置描述符表，将纹理资源与流水线绑定(因为只绑定一次，所以不需要做地址偏移)
+	
+	//设置描述符表，将纹理资源与流水线绑定
 	CD3DX12_GPU_DESCRIPTOR_HANDLE tex(m_srvHeap->GetGPUDescriptorHandleForHeapStart());
 	//tex.Offset(ritem->material->DiffuseSrvHeapIndex, m_cbv_srv_uavDescriptorSize);
 	m_CommandList->SetGraphicsRootDescriptorTable(0, tex);
@@ -256,9 +230,14 @@ void QDirect3D12Widget::Draw()
 	skyTexDescriptor.Offset(RIManager.mMaterials["sky"]->DiffuseSrvHeapIndex, m_cbv_srv_uavDescriptorSize);
 	m_CommandList->SetGraphicsRootDescriptorTable(4, skyTexDescriptor);
 
+	m_MemoryManagerModule->ResetRenderTarget(false, 0);
+
 	//分别设置PSO并绘制对应渲染项
 	m_CommandList->SetPipelineState(RIManager.mPSOs["opaque"].Get());
 	DrawRenderItems(RenderQueue::Opaque);
+
+	m_MemoryManagerModule->ResetRenderTarget(true);
+	m_MemoryManagerModule->GrabScreen();
 
 	m_CommandList->SetPipelineState(RIManager.mPSOs["alphaTest"].Get());
 	DrawRenderItems(RenderQueue::AlphaTest);
@@ -270,10 +249,7 @@ void QDirect3D12Widget::Draw()
 	m_CommandList->SetPipelineState(RIManager.mPSOs["Skybox"].Get());
 	DrawRenderItems(RenderQueue::Skybox);
 
-	// Indicate a state transition on the resource usage.
-	// 等到渲染完成，我们要将后台缓冲区的状态改成呈现状态，使其之后推到前台缓冲区显示。完了，关闭命令列表，等待传入命令队列。
-	m_CommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_SwapChainBuffer[ref_mCurrentBackBuffer].Get(),
-		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));//从渲染目标到呈现
+	m_MemoryManagerModule->EndNewFrame();
 	// 完成命令的记录关闭命令列表 
 	ThrowIfFailed(m_CommandList->Close());
 
@@ -284,7 +260,6 @@ void QDirect3D12Widget::Draw()
 
 	// swap the back and front buffers
 	ThrowIfFailed(m_SwapChain->Present(0, 0));
-	ref_mCurrentBackBuffer = (ref_mCurrentBackBuffer + 1) % 2;
 
 	//// Wait until frame commands are complete. This waiting is
 	//// inefficient and is done for simplicity. Later we will show how to
@@ -327,12 +302,13 @@ void QDirect3D12Widget::DrawRenderItems(RenderQueue queue)
 		objCBAddress += ritem->ObjCBIndex * objCBByteSize;
 		m_CommandList->SetGraphicsRootConstantBufferView(1,//寄存器槽号
 			objCBAddress);//子资源地址
-	// Deprecated: use descriptor table
-	//		UINT objCbvIndex = currFrameResourcesIndex * (UINT)mMultiGeo->RenderItems.size() + ritem->ObjCBIndex;
-	//		auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
-	//		handle.Offset(objCbvIndex, m_cbv_srv_uavDescriptorSize);
-	//		m_CommandList->SetGraphicsRootDescriptorTable(0, //根参数的起始索引
-	//			handle);
+
+		// Deprecated: use descriptor table
+		//		UINT objCbvIndex = currFrameResourcesIndex * (UINT)mMultiGeo->RenderItems.size() + ritem->ObjCBIndex;
+		//		auto handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
+		//		handle.Offset(objCbvIndex, m_cbv_srv_uavDescriptorSize);
+		//		m_CommandList->SetGraphicsRootDescriptorTable(0, //根参数的起始索引
+		//			handle);
 
 		//绘制顶点（通过索引缓冲区绘制）
 		m_CommandList->DrawIndexedInstanced(ritem->IndexCount, //每个实例要绘制的索引数
@@ -441,7 +417,8 @@ void QDirect3D12Widget::BuildTexture()
 	// Cubemap texture
 	RIManager.PushTexture("cubeenv", L"Cubemaps/skybox/sky.jpg", true);
 	// Create SRV
-	RIManager.CreateTextureSRV();
+	//RIManager.CreateTextureSRV();
+	m_MemoryManagerModule->InitSRVHeap(&RIManager);
 }
 
 void QDirect3D12Widget::BuildMaterial()
@@ -995,10 +972,7 @@ bool QDirect3D12Widget::InitDirect3D()
 		SetMSAA();
 		CreateCommandObjects();
 		CreateSwapChain();
-		CreateDescriptorHeap();
-		CreateRTV();
-		CreateDSV();
-		CreateViewPortAndScissorRect();
+		CreateRTVDSVDescriptorHeap();
 
 		ThrowIfFailed(m_CommandList->Close());
 		ID3D12CommandList* cmdLists[] = { m_CommandList };
@@ -1021,6 +995,10 @@ void QDirect3D12Widget::CreateDevice()
 	DXCall(D3D12CreateDevice(nullptr,   //此参数如果设置为nullptr，则使用主适配器
 		D3D_FEATURE_LEVEL_12_0,         //应用程序需要硬件所支持的最低功能级别
 		IID_PPV_ARGS(&m_d3dDevice)));    //返回所建设备
+
+	// Init all modules using the device
+	m_WorkSubmissionModule = std::make_unique<D3DModules::WorkSubmissionModule>(m_d3dDevice.Get());
+	m_MemoryManagerModule = std::make_unique<D3DModules::MemoryManagerModule>(m_d3dDevice.Get());
 }
 /// <summary>
 /// Initialize:: 2 Create the Fance
@@ -1061,7 +1039,6 @@ void QDirect3D12Widget::SetMSAA()
 /// </summary>
 void QDirect3D12Widget::CreateCommandObjects()
 {
-	m_WorkSubmissionModule = std::make_unique<D3DModules::WorkSubmissionModule>(m_d3dDevice.Get());
 	// Create Command Queue
 	m_CommandQueue = m_WorkSubmissionModule->CreateCommandQueue("direct", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	m_DirectCmdListAlloc = m_WorkSubmissionModule->CreateCommandListAllocator("main", D3D12_COMMAND_LIST_TYPE_DIRECT);
@@ -1102,111 +1079,15 @@ void QDirect3D12Widget::CreateSwapChain()
 }
 /// <summary>
 /// Initialize:: 7 Create the Descriptor Heaps
-/// </summary>
-void QDirect3D12Widget::CreateDescriptorHeap()
-{
-	//首先创建RTV堆
-	D3D12_DESCRIPTOR_HEAP_DESC rtvDescriptorHeapDesc;
-	rtvDescriptorHeapDesc.NumDescriptors = 2;
-	rtvDescriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-	rtvDescriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-	rtvDescriptorHeapDesc.NodeMask = 0;
-	ThrowIfFailed(m_d3dDevice->CreateDescriptorHeap(&rtvDescriptorHeapDesc, IID_PPV_ARGS(&m_rtvHeap)));
-
-	//然后创建DSV堆
-	D3D12_DESCRIPTOR_HEAP_DESC dsvDescriptorHeapDesc;
-	dsvDescriptorHeapDesc.NumDescriptors = 1;
-	dsvDescriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-	dsvDescriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-	dsvDescriptorHeapDesc.NodeMask = 0;
-	ThrowIfFailed(m_d3dDevice->CreateDescriptorHeap(&dsvDescriptorHeapDesc, IID_PPV_ARGS(&m_dsvHeap)));
-}
-/// <summary>
 /// Initialize:: 8 Create Render Target View
-/// </summary>
-void QDirect3D12Widget::CreateRTV()
-{
-	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart());
-	for (int i = 0; i < 2; i++)
-	{
-		//获得存于交换链中的后台缓冲区资源
-		m_SwapChain->GetBuffer(i, IID_PPV_ARGS(m_SwapChainBuffer[i].GetAddressOf()));
-		//创建RTV
-		m_d3dDevice->CreateRenderTargetView(m_SwapChainBuffer[i].Get(),
-			nullptr,	//在交换链创建中已经定义了该资源的数据格式，所以这里指定为空指针
-			rtvHeapHandle);	//描述符句柄结构体（这里是变体，继承自CD3DX12_CPU_DESCRIPTOR_HANDLE）
-		//偏移到描述符堆中的下一个缓冲区
-		rtvHeapHandle.Offset(1, m_rtvDescriptorSize);
-	}
-}
-/// <summary>
 /// Initialize:: 9 Create the Depth/Stencil Buffer & View
-/// </summary>
-void QDirect3D12Widget::CreateDSV()
-{
-	// Two steps to create a resource == buffer == ID3D12Resource
-	// 
-	// 1. Filling out a D3D12_RESOURCE_DESC structure 
-	//	在CPU中创建好深度模板数据资源
-	D3D12_RESOURCE_DESC dsvResourceDesc;
-	dsvResourceDesc.Alignment = 0;	//指定对齐
-	dsvResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;	//指定资源维度（类型）为TEXTURE2D
-	dsvResourceDesc.DepthOrArraySize = 1;	//纹理深度为1
-	dsvResourceDesc.Width = width();	//资源宽
-	dsvResourceDesc.Height = height();	//资源高
-	dsvResourceDesc.MipLevels = 1;	//MIPMAP层级数量
-	dsvResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;	//指定纹理布局（这里不指定）
-	dsvResourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;	//深度模板资源的Flag
-	dsvResourceDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;	//24位深度，8位模板,还有个无类型的格式DXGI_FORMAT_R24G8_TYPELESS也可以使用
-	dsvResourceDesc.SampleDesc.Count = m4xMsaaState ? 4 : 1;	//多重采样数量
-	dsvResourceDesc.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;	//多重采样质量
-
-	CD3DX12_CLEAR_VALUE optClear;	//清除资源的优化值，提高清除操作的执行速度（CreateCommittedResource函数中传入）
-	optClear.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;//24位深度，8位模板,还有个无类型的格式DXGI_FORMAT_R24G8_TYPELESS也可以使用
-	optClear.DepthStencil.Depth = 1;	//初始深度值为1
-	optClear.DepthStencil.Stencil = 0;	//初始模板值为0
-
-	// 2. calling the ID3D12Device::CreateCommittedResource method
-	//	创建一个资源和一个堆，并将资源提交至堆中（将深度模板数据提交至GPU显存中）
-	ThrowIfFailed(m_d3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),	//堆类型为默认堆（不能写入）
-		D3D12_HEAP_FLAG_NONE,	                //Flag
-		&dsvResourceDesc,	                    //上面定义的DSV资源指针
-		D3D12_RESOURCE_STATE_COMMON,	        //资源的状态为初始状态
-		&optClear,	                            //上面定义的优化值指针
-		IID_PPV_ARGS(&m_DepthStencilBuffer)));	//返回深度模板资源
-
-	m_d3dDevice->CreateDepthStencilView(m_DepthStencilBuffer.Get(),
-		nullptr,	//D3D12_DEPTH_STENCIL_VIEW_DESC类型指针，可填&dsvDesc
-					//由于在创建深度模板资源时已经定义深度模板数据属性，所以这里可以指定为空指针
-		m_dsvHeap->GetCPUDescriptorHandleForHeapStart());	//DSV句柄
-
-	// Transition the resource from its initial state to be used as a depth buffer.
-	m_CommandList->ResourceBarrier(1,	//Barrier屏障个数
-		&CD3DX12_RESOURCE_BARRIER::Transition(m_DepthStencilBuffer.Get(),
-			D3D12_RESOURCE_STATE_COMMON,	//转换前状态（创建时的状态，即CreateCommittedResource函数中定义的状态）
-			D3D12_RESOURCE_STATE_DEPTH_WRITE));
-}
-
-/// <summary>
 /// Initialize:: 11 Create the Depth/Stencil Buffer & View
 /// </summary>
-void QDirect3D12Widget::CreateViewPortAndScissorRect()
+void QDirect3D12Widget::CreateRTVDSVDescriptorHeap()
 {
-	// Set viewport
-	// 视口设置
-	viewPort.TopLeftX = 0;
-	viewPort.TopLeftY = 0;
-	viewPort.Width = width();
-	viewPort.Height = height();
-	viewPort.MaxDepth = 1.0f;
-	viewPort.MinDepth = 0.0f;
-	// Set scissor rectangle
-	// 裁剪矩形设置（矩形外的像素都将被剔除）
-	// 前两个为左上点坐标，后两个为右下点坐标
-	scissorRect.left = 0;
-	scissorRect.top = 0;
-	scissorRect.right = width();
-	scissorRect.bottom = height();
+	m_MemoryManagerModule->SetRenderTargetNum(3);
+	m_MemoryManagerModule->SetCommandList(m_CommandList);
+	m_MemoryManagerModule->CreateRTVHeap(width(), height(), m_SwapChain.Get());
 }
 #pragma endregion
 

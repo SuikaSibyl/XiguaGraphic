@@ -30,6 +30,7 @@
 #include <wave.h>
 
 #include <WorkSubmissionModule.h>
+#include <MemoryManagerModule.h>
 
 using Microsoft::WRL::ComPtr;
 
@@ -153,13 +154,13 @@ private:
     int     m_Fps;
     int     m_TotalTime;
     bool    m_bRenderActive;        // Ture == not paused
-    UINT    mCurrentBackBuffer = 0;
     int     mCurrentFence = 0;	    //Initial CPU Fence = 0
 
     // ================================================================
     // -------------------- D3D Important Module ----------------------
     // ================================================================
     std::unique_ptr<D3DModules::WorkSubmissionModule> m_WorkSubmissionModule;
+    std::unique_ptr<D3DModules::MemoryManagerModule> m_MemoryManagerModule;
 
     // ================================================================
     // --------------------- D3D Init Variable ------------------------
@@ -183,16 +184,10 @@ private:
     ID3D12GraphicsCommandList*      m_CommandList;
     // Resource & Swap Chain
     ComPtr<ID3D12Resource>          m_DepthStencilBuffer;
-    ComPtr<ID3D12Resource>          m_SwapChainBuffer[2];
     ComPtr<IDXGISwapChain>          m_SwapChain;
     // Descriptor Heaps
-    ComPtr<ID3D12DescriptorHeap>    m_rtvHeap = nullptr;
-    ComPtr<ID3D12DescriptorHeap>    m_dsvHeap = nullptr;
-    ComPtr<ID3D12DescriptorHeap>    m_srvHeap = nullptr;
+    ID3D12DescriptorHeap*    m_srvHeap = nullptr;
     ComPtr<ID3D12DescriptorHeap>    m_cbvHeap = nullptr;
-    // Rect & ViewPort
-    D3D12_RECT scissorRect;
-    D3D12_VIEWPORT viewPort;
 
     // ================================================================
     // --------------------- D3D Initilization ------------------------
@@ -205,10 +200,7 @@ private:
     void SetMSAA();
     void CreateCommandObjects();
     void CreateSwapChain();
-    void CreateDescriptorHeap();
-    void CreateRTV();
-    void CreateDSV();
-    void CreateViewPortAndScissorRect();
+    void CreateRTVDSVDescriptorHeap();
 #pragma endregion
 
     // ================================================================

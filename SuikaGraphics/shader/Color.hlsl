@@ -42,7 +42,10 @@ float4 PS(VertexOut pin) : SV_Target
     MaterialData matData = gMaterialData[materialIndex];
     float4 dark = float4(0.117,0.117,0.117,1 );
 
-    float4 albedo = gDiffuseMap[matData.gDiffuseMapIndex].Sample(gSamPointWrap, pin.uv);
+    uint index = matData.gDiffuseMapIndex;
+    if(index==3)
+        index=8;
+    float4 albedo = gDiffuseMap[index].Sample(gSamPointWrap, pin.uv);
     
     float3 N = normalize(pin.WorldNormal);
     float3 V = normalize(gEyePosW - pin.WorldPos);

@@ -241,7 +241,7 @@
     <ClInclude Include="header\WorkSubmissionModule.h">
       <Filter>Header Files\D3DModules</Filter>
     </ClInclude>
-    <ClInclude Include="source\D3DModules\MemoryManagerModule.h">
+    <ClInclude Include="header\MemoryManagerModule.h">
       <Filter>Header Files\D3DModules</Filter>
     </ClInclude>
   </ItemGroup>
