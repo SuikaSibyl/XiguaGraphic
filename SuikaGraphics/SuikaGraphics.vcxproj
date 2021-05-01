@@ -24,7 +24,7 @@
     <WindowsTargetPlatformVersion Condition="'$(Configuration)|$(Platform)' == 'Debug|Win32'">10.0.18362.0</WindowsTargetPlatformVersion>
     <WindowsTargetPlatformVersion Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">10.0</WindowsTargetPlatformVersion>
     <WindowsTargetPlatformVersion Condition="'$(Configuration)|$(Platform)' == 'Release|Win32'">10.0.18362.0</WindowsTargetPlatformVersion>
-    <WindowsTargetPlatformVersion Condition="'$(Configuration)|$(Platform)'=='Release|x64'">10.0.18362.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion Condition="'$(Configuration)|$(Platform)'=='Release|x64'">10.0</WindowsTargetPlatformVersion>
     <QtMsBuild Condition="'$(QtMsBuild)'=='' OR !Exists('$(QtMsBuild)\qt.targets')">$(MSBuildProjectDirectory)\QtMsBuild</QtMsBuild>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -48,7 +48,9 @@
   <Target Name="QtMsBuildNotFound" BeforeTargets="CustomBuild;ClCompile" Condition="!Exists('$(QtMsBuild)\qt.targets') or !Exists('$(QtMsBuild)\qt.props')">
     <Message Importance="High" Text="QtMsBuild: could not locate qt.targets, qt.props; project may not build correctly." />
   </Target>
-  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 10.2.props" />
+  </ImportGroup>
   <ImportGroup Label="Shared" />
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)' == 'Debug|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
@@ -77,7 +79,7 @@
     <IncludePath>E:\Qt\5.12.10\msvc2017\include;.\header;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>E:\Qt\5.12.10\msvc2017_64\include;.\header;$(IncludePath)</IncludePath>
+    <IncludePath>.\source\QDirect3D12Widget;D:\qt5.14\qt\5.14.2\msvc2017_64\include;E:\Qt\5.12.10\msvc2017_64\include;.\header;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <FxCompile>
@@ -108,6 +110,40 @@
     <FxCompile>
       <EnableDebuggingInformation>true</EnableDebuggingInformation>
     </FxCompile>
+    <ClCompile>
+      <AdditionalIncludeDirectories>./;../../common/inc;$(CudaToolkitDir)/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <CudaCompile>
+      <Include>./;../../common/inc</Include>
+    </CudaCompile>
+    <CudaCompile>
+      <TargetMachinePlatform>64</TargetMachinePlatform>
+    </CudaCompile>
+    <Link>
+      <AdditionalDependencies>cudart_static.lib;d3d12.lib;d3dcompiler.lib;dxgi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <CudaCompile>
+      <Include>./;../../common/inc</Include>
+      <TargetMachinePlatform>64</TargetMachinePlatform>
+    </CudaCompile>
+    <Link>
+      <AdditionalDependencies>cudart_static.lib;d3d12.lib;d3dcompiler.lib;dxgi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <FxCompile>
+      <EntryPointName>VS</EntryPointName>
+    </FxCompile>
+    <FxCompile>
+      <DisableOptimizations>true</DisableOptimizations>
+    </FxCompile>
+    <FxCompile>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <ShaderModel>5.1</ShaderModel>
+    </FxCompile>
+    <ClCompile>
+      <AdditionalIncludeDirectories>./;../../common/inc;$(CudaToolkitDir)/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
   </ItemDefinitionGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|Win32'" Label="QtSettings">
     <QtInstall>msvc2017</QtInstall>
@@ -154,7 +190,7 @@
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
-      <SubSystem>Windows</SubSystem>
+      <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
@@ -185,7 +221,9 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="source\Cuda\CudaManager.cpp" />
     <ClCompile Include="source\D3DModules\MemoryManagerModule.cpp" />
+    <ClCompile Include="source\D3DModules\SynchronizationModule.cpp" />
     <ClCompile Include="source\D3DModules\WorksubmissionModule.cpp" />
     <ClCompile Include="source\GameObject\Camera.cpp" />
     <ClCompile Include="source\Geometry\GeometryGenerator.cpp" />
@@ -198,6 +236,7 @@
     <ClCompile Include="source\Scene\wave.cpp" />
     <ClCompile Include="source\Texture\DDSTextureLoader.cpp" />
     <ClCompile Include="source\Texture\ImageBasic.cpp" />
+    <ClCompile Include="source\Texture\ScreenGrab.cpp" />
     <ClCompile Include="source\Texture\std_image.cpp" />
     <ClCompile Include="source\Texture\TextureHelper.cpp" />
     <ClCompile Include="source\Utility\Debug.cpp" />
@@ -210,6 +249,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Component.h" />
+    <ClInclude Include="header\CudaFunc.h" />
+    <ClInclude Include="header\CudaManager.h" />
+    <ClInclude Include="header\CudaUtil.h" />
     <ClInclude Include="header\DDSTextureLoader.h" />
     <ClInclude Include="header\Debug.h" />
     <ClInclude Include="header\Delegate.h" />
@@ -219,12 +261,20 @@
     <ClInclude Include="header\Light.h" />
     <ClInclude Include="header\Material.h" />
     <ClInclude Include="header\MemoryManagerModule.h" />
+    <ClInclude Include="header\ScreenGrab.h" />
     <ClInclude Include="header\Singleton.h" />
+    <ClInclude Include="header\SynchronizationModule.h" />
     <ClInclude Include="header\Texture.h" />
     <ClInclude Include="header\TextureHelper.h" />
     <ClInclude Include="header\Transform.h" />
     <ClInclude Include="header\wave.h" />
     <ClInclude Include="header\WorkSubmissionModule.h" />
+    <ClInclude Include="Resource\Cudas\DevMaterial.cuh" />
+    <ClInclude Include="Resource\Cudas\helper_math.h" />
+    <ClInclude Include="Resource\Cudas\HitableList.cuh" />
+    <ClInclude Include="Resource\Cudas\RTUtils.cuh" />
+    <ClInclude Include="Resource\Cudas\Sphere.cuh" />
+    <ClInclude Include="Resource\Cudas\Utility.cuh" />
     <QtMoc Include="header\SuikaGraphics.h" />
     <ClInclude Include="header\Camera.h" />
     <ClInclude Include="header\d3dx12.h" />
@@ -241,23 +291,14 @@
     <QtMoc Include="source\QDirect3D12Widget\QDirect3D12Widget.h" />
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="shader\Color.hlsl">
-      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</DisableOptimizations>
-      <EnableDebuggingInformation Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</EnableDebuggingInformation>
-      <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">VS</EntryPointName>
-      <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">VS</EntryPointName>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-    </FxCompile>
-    <FxCompile Include="shader\LightingUtils.hlsl">
-      <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-      </EntryPointName>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-    </FxCompile>
+    <CudaCompile Include="Resource\Cudas\main.cu" />
+    <CudaCompile Include="Resource\Cudas\RTUtils.cu" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">
     <Import Project="$(QtMsBuild)\qt.targets" />
   </ImportGroup>
   <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 10.2.targets" />
   </ImportGroup>
 </Project>

@@ -26,6 +26,7 @@ enum RenderQueue
 	AlphaTest,
 	Transparent,
 	Skybox,
+	PostProcessing,
 };
 
 class RenderItemManager
@@ -79,6 +80,8 @@ public:
 	}
 
 	void PushTexture(std::string name, std::wstring path, bool isCubemap = false);
+	void PushTextureCuda(std::string name, UINT width, UINT height, bool isCubemap = false);
+
 	void CreateTextureSRV();
 	void SetTexture(std::string mat_name, std::string texture_name)
 	{

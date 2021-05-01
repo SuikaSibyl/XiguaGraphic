@@ -2,6 +2,7 @@
 #include <string>
 #include <Utility.h>
 #include <RenderItemManagment.h>
+#include <SynchronizationModule.h>
 
 using Microsoft::WRL::ComPtr;
 namespace D3DModules
@@ -9,19 +10,23 @@ namespace D3DModules
     class MemoryManagerModule;
     class ShaderResourceSubmodule;
 
-    class RenderTarget
+    class RenderTargetTexture
     {
     public:
         friend class ShaderResourceSubmodule;
+        friend class RenderTargetSubmodule;
 
-        RenderTarget(UINT width, UINT height, DXGI_FORMAT format, UINT index, MemoryManagerModule* MMModule);
+        RenderTargetTexture(UINT width, UINT height, DXGI_FORMAT format, UINT index, MemoryManagerModule* MMModule);
         ID3D12Resource* Resource() { return mResource.Get(); }
+        void SaveToFile();
+        void CaptureTexture(ID3D12GraphicsCommandList* ptr_CommandList);
 
     private:
         UINT mTargetWidth;
         UINT mTargetHeight;
         DXGI_FORMAT mTargetFormat;
         ComPtr<ID3D12Resource> mResource = nullptr;
+        ComPtr<ID3D12Resource> readbackBuffer = nullptr;
 
         ID3D12Device* device = nullptr;
         ID3D12DescriptorHeap* m_rtvHeap = nullptr;
@@ -32,6 +37,9 @@ namespace D3DModules
 
         UINT RTVHeapIdx = 0;
         UINT SRVHeapIdx = 0;
+
+        UINT8* pReadbackBufferData{};
+        MemoryManagerModule* MMModule;
     };
 
     //===================================================================================
@@ -44,7 +52,7 @@ namespace D3DModules
     public:
         // Frineds
         // -------------------------------
-        friend class RenderTarget;
+        friend class RenderTargetTexture;
         friend class MemoryManagerModule;
         friend class ShaderResourceSubmodule;
 
@@ -134,77 +142,16 @@ namespace D3DModules
 
         void ReadBackToBuffer()
         {
-            ID3D12Resource* resource = mRenderTarget["Assist0"]->Resource();
-
-            D3D12_HEAP_PROPERTIES readbackHeapProperties{ CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_READBACK) };
-            //D3D12_RESOURCE_DESC readbackBufferDesc{ resource->GetDesc() };
-            ComPtr<ID3D12Resource> readbackBuffer;
-
-            D3D12_RESOURCE_DESC bufferDesc = {};
-            bufferDesc.Alignment = resource->GetDesc().Alignment;
-            bufferDesc.DepthOrArraySize = 1;
-            bufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-            bufferDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-            bufferDesc.Format = DXGI_FORMAT_UNKNOWN;
-            bufferDesc.Height = 1;
-            bufferDesc.Width = resource->GetDesc().Width * resource->GetDesc().Height;
-            bufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-            bufferDesc.MipLevels = 1;
-            bufferDesc.SampleDesc.Count = 1;
-            bufferDesc.SampleDesc.Quality = 0;
-
-            /*clear颜色与Render函数的Clear必须一致，这样一来我们即得到了驱动层的一个优化处理，也避免了在调试时，
-                因为渲染循环反复执行而不断输出的一个因为两个颜色不一致，而产生的未优化警告信息。*/
-            D3D12_CLEAR_VALUE optClear = {};
-            float dark[4] = { 0.117,0.117,0.117,1 };
-            optClear.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-            memcpy(optClear.Color, &dark, 4 * sizeof(float));
-
-            DXCall(m_d3dDevice->CreateCommittedResource(
-                &readbackHeapProperties,
-                D3D12_HEAP_FLAG_NONE,
-                &bufferDesc,
-                D3D12_RESOURCE_STATE_COPY_DEST,
-                nullptr,	                                        //上面定义的优化值指针
-                IID_PPV_ARGS(&readbackBuffer)));	                    //返回深度模板资源
-
+            static bool firsttime = true;
+            //ID3D12Resource* resource = mRenderTarget["Assist0"]->Resource();
+            
+            if (firsttime == true)
             {
-                D3D12_RESOURCE_BARRIER outputBufferResourceBarrier
-                {
-                    CD3DX12_RESOURCE_BARRIER::Transition(
-                        resource,
-                        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                        D3D12_RESOURCE_STATE_COPY_SOURCE)
-                };
-                ptr_CommandList->ResourceBarrier(1, &outputBufferResourceBarrier);
+                firsttime = false;
+                mRenderTarget["Assist0"]->CaptureTexture(ptr_CommandList);
             }
-            ptr_CommandList->CopyResource(readbackBuffer.Get(), resource);
-
-            {
-                D3D12_RESOURCE_BARRIER outputBufferResourceBarrier
-                {
-                    CD3DX12_RESOURCE_BARRIER::Transition(
-                        resource,
-                        D3D12_RESOURCE_STATE_COPY_SOURCE,
-                        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
-                };
-                ptr_CommandList->ResourceBarrier(1, &outputBufferResourceBarrier);
-            }
-            // Code goes here to close, execute (and optionally reset) the command list, and also
-            // to use a fence to wait for the command queue.
-
-            // The code below assumes that the GPU wrote FLOATs to the buffer.
-            D3D12_RANGE readbackBufferRange{ 0, resource->GetDesc().Width * resource->GetDesc().Height };
-            FLOAT* pReadbackBufferData{};
-            DXCall(
-                readbackBuffer->Map
-                (
-                    0,
-                    &readbackBufferRange,
-                    reinterpret_cast<void**>(&pReadbackBufferData)
-                )
-            );
         }
+
         void EndNewFrame()
         {
             // Indicate a state transition on the resource usage.
@@ -222,7 +169,7 @@ namespace D3DModules
         ComPtr<ID3D12DescriptorHeap>    m_dsvHeap = nullptr;
         ComPtr<ID3D12Resource>          m_SwapChainBuffer[2];
         ComPtr<ID3D12Resource>          m_DepthStencilBuffer;
-        std::unordered_map<std::string, std::unique_ptr<RenderTarget>> mRenderTarget;
+        std::unordered_map<std::string, std::unique_ptr<RenderTargetTexture>> mRenderTarget;
         UINT  m_CurrentBackBuffer = 0;
         UINT  m_rtvDescriptorSize;
         // Rect & ViewPort
@@ -331,7 +278,7 @@ namespace D3DModules
     class MemoryManagerModule
     {
     public:
-        friend class RenderTarget;
+        friend class RenderTargetTexture;
 
         MemoryManagerModule(ID3D12Device* device) :
             m_d3dDevice(device),
@@ -404,6 +351,11 @@ namespace D3DModules
             RTVSub.EndNewFrame();
         }
 
+        void SetSynchronizer(SynchronizationModule* sync)
+        {
+            synchronizer = sync;
+        }
+
         void SetCommandList(ID3D12GraphicsCommandList* cmdList)
         {
             ptr_CommandList = cmdList;
@@ -429,5 +381,6 @@ namespace D3DModules
         ID3D12Device* m_d3dDevice;
         UINT RenderTargetNum = 2;
         ID3D12GraphicsCommandList* ptr_CommandList;
+        SynchronizationModule* synchronizer;
     };
 }

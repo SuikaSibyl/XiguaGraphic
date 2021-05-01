@@ -34,6 +34,12 @@ void RenderItemManager::PushTexture(std::string name, std::wstring path, bool is
 	mTextures[name]->Index = mTextures.size() - 1;
 }
 
+void RenderItemManager::PushTextureCuda(std::string name, UINT width, UINT height, bool isCubemap)
+{
+	mTextures[name] = helper.CreateCudaTexture(name, width, height);
+	mTextures[name]->Index = mTextures.size() - 1;
+}
+
 void RenderItemManager::CreateTextureSRV()
 {
 	// Create SRV Heap

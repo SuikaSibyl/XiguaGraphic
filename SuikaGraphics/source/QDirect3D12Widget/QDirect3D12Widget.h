@@ -31,6 +31,8 @@
 
 #include <WorkSubmissionModule.h>
 #include <MemoryManagerModule.h>
+#include <SynchronizationModule.h>
+#include <CudaManager.h>
 
 using Microsoft::WRL::ComPtr;
 
@@ -113,15 +115,9 @@ private:
     void BuildMultiGeometry();
     void BuildLandGeometry();
     void BuildLakeGeometry();
+    void BuildScreenCanvasGeometry();
     // ------------------------------------
     ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
-
-    // ================================================================
-    // -------------------- Frame Resource Objects --------------------
-    // ================================================================
-    int currFrameResourcesIndex = 0;
-    std::vector<std::unique_ptr<FrameResource>> FrameResourcesArray;
-    FrameResource* mCurrFrameResource = nullptr;
 
     // ================================================================
     // --------------------- No Important Stuffs ----------------------
@@ -139,7 +135,6 @@ private:
     // ================================================================
     // ----------------- Private Helper Function ----------------------
     // ================================================================
-    void FlushCmdQueue();
     void CalculateFrameState();
 
     ComPtr<ID3D12Resource> CreateDefaultBuffer
@@ -154,20 +149,21 @@ private:
     int     m_Fps;
     int     m_TotalTime;
     bool    m_bRenderActive;        // Ture == not paused
-    int     mCurrentFence = 0;	    //Initial CPU Fence = 0
 
     // ================================================================
     // -------------------- D3D Important Module ----------------------
     // ================================================================
     std::unique_ptr<D3DModules::WorkSubmissionModule> m_WorkSubmissionModule;
     std::unique_ptr<D3DModules::MemoryManagerModule> m_MemoryManagerModule;
+    std::unique_ptr<D3DModules::SynchronizationModule> m_SynchronizationModule;
+    std::unique_ptr<CudaManager> m_CudaManagerModule;
 
     // ================================================================
     // --------------------- D3D Init Variable ------------------------
     // ================================================================
     ComPtr<ID3D12Device>    m_d3dDevice;
     ComPtr<IDXGIFactory4>   m_dxgiFactory;
-    ComPtr<ID3D12Fence>     m_fence;
+
     // View-Descriptor Size
     UINT m_rtvDescriptorSize;
     UINT m_dsvDescriptorSize;
@@ -188,6 +184,8 @@ private:
     // Descriptor Heaps
     ID3D12DescriptorHeap*    m_srvHeap = nullptr;
     ComPtr<ID3D12DescriptorHeap>    m_cbvHeap = nullptr;
+    // Frame resource
+    FrameResource* mCurrFrameResource;
 
     // ================================================================
     // --------------------- D3D Initilization ------------------------

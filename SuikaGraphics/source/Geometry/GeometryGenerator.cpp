@@ -214,6 +214,29 @@ GeometryGenerator::MeshData GeometryGenerator::CreateCube()
 	return meshData;
 }
 
+GeometryGenerator::MeshData GeometryGenerator::CreateScreenQuad()
+{
+	MeshData meshData;
+	meshData.Vertices.resize(4);
+
+	meshData.Vertices[0].Position = XMFLOAT3(-1, -1, 0);	meshData.Vertices[0].TexC = XMFLOAT2(1, 0);
+	meshData.Vertices[1].Position = XMFLOAT3(1, -1, 0);		meshData.Vertices[1].TexC = XMFLOAT2(0, 0);
+	meshData.Vertices[2].Position = XMFLOAT3(-1, 1, 0);		meshData.Vertices[2].TexC = XMFLOAT2(1, 1);
+	meshData.Vertices[3].Position = XMFLOAT3(1, 1, 0);		meshData.Vertices[3].TexC = XMFLOAT2(0, 1);
+
+	meshData.Indices32.resize(6);
+
+	meshData.Indices32[0] = 0;
+	meshData.Indices32[1] = 2;
+	meshData.Indices32[2] = 1;
+
+	meshData.Indices32[3] = 2;
+	meshData.Indices32[4] = 3;
+	meshData.Indices32[5] = 1;
+
+	return meshData;
+}
+
 GeometryGenerator::MeshData GeometryGenerator::CreateGrid(float width, float depth, uint32 m, uint32 n)
 {
 	MeshData meshData;
@@ -224,7 +247,8 @@ GeometryGenerator::MeshData GeometryGenerator::CreateGrid(float width, float dep
 	float dx = width / (n - 1);
 	float dz = depth / (m - 1);
 	float du = 1.0f / (n - 1);
-	float dv = 1.0f / (m - 1); meshData.Vertices.resize(vertexCount);
+	float dv = 1.0f / (m - 1);
+	meshData.Vertices.resize(vertexCount);
 	for (uint32 i = 0; i < m; ++i)
 	{
 		float z = halfDepth - i * dz;

@@ -44,7 +44,7 @@ float4 PS(VertexOut pin) : SV_Target
 
     uint index = matData.gDiffuseMapIndex;
     if(index==3)
-        index=8;
+        index=9;
     float4 albedo = gDiffuseMap[index].Sample(gSamPointWrap, pin.uv);
     
     float3 N = normalize(pin.WorldNormal);

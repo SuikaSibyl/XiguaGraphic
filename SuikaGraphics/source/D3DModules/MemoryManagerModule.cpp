@@ -1,12 +1,16 @@
 #include <MemoryManagerModule.h>
-
+#include <SynchronizationModule.h>
+#include <ScreenGrab.h>
+#include <wincodec.h>
 //======================================================================================
 //======================================================================================
 // RenderTarget
 //======================================================================================
 //======================================================================================
-D3DModules::RenderTarget::RenderTarget(UINT width, UINT height, DXGI_FORMAT format, UINT index, MemoryManagerModule* MMModule)
+
+D3DModules::RenderTargetTexture::RenderTargetTexture(UINT width, UINT height, DXGI_FORMAT format, UINT index, MemoryManagerModule* MMModule)
 {
+    this->MMModule = MMModule;
     // Init target features
     mTargetWidth = width;
     mTargetHeight = height;
@@ -20,18 +24,18 @@ D3DModules::RenderTarget::RenderTarget(UINT width, UINT height, DXGI_FORMAT form
     RTVHeapIdx = index + 2;
     SRVHeapIdx = index;
 
-    D3D12_RESOURCE_DESC hdrDesc = {};
-    hdrDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    hdrDesc.Alignment = 0;
-    hdrDesc.Width = mTargetWidth;
-    hdrDesc.Height = mTargetHeight;
-    hdrDesc.DepthOrArraySize = 1;
-    hdrDesc.MipLevels = 1;
-    hdrDesc.Format = mTargetFormat;
-    hdrDesc.SampleDesc.Count = 1;
-    hdrDesc.SampleDesc.Quality = 0;
-    hdrDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-    hdrDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;    // * IMPORTANT * //
+    D3D12_RESOURCE_DESC rtDesc = {};
+    rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    rtDesc.Alignment = 0;
+    rtDesc.Width = mTargetWidth;
+    rtDesc.Height = mTargetHeight;
+    rtDesc.DepthOrArraySize = 1;
+    rtDesc.MipLevels = 1;
+    rtDesc.Format = mTargetFormat;
+    rtDesc.SampleDesc.Count = 1;
+    rtDesc.SampleDesc.Quality = 0;
+    rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;    // * IMPORTANT * //
 
     /*clear颜色与Render函数的Clear必须一致，这样一来我们即得到了驱动层的一个优化处理，也避免了在调试时，
         因为渲染循环反复执行而不断输出的一个因为两个颜色不一致，而产生的未优化警告信息。*/
@@ -43,7 +47,7 @@ D3DModules::RenderTarget::RenderTarget(UINT width, UINT height, DXGI_FORMAT form
     ThrowIfFailed(device->CreateCommittedResource(
         &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),	//堆类型为默认堆（不能写入）
         D3D12_HEAP_FLAG_NONE,	                            //Flag
-        &hdrDesc,	                                        //上面定义的DSV资源指针
+        &rtDesc,	                                        //上面定义的DSV资源指针
         D3D12_RESOURCE_STATE_COMMON,	                    //资源的状态为初始状态
         &optClear,	                                        //上面定义的优化值指针
         IID_PPV_ARGS(&mResource)));	                    //返回深度模板资源
@@ -53,19 +57,36 @@ D3DModules::RenderTarget::RenderTarget(UINT width, UINT height, DXGI_FORMAT form
     CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart());
     rtvHeapHandle.Offset(index + 2, m_rtvDescriptorSize);
     device->CreateRenderTargetView(mResource.Get(), nullptr, rtvHeapHandle);
+}
 
-    //// Get pointer to the start of the heap.
-    //CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(m_srvHeap->GetCPUDescriptorHandleForHeapStart());
-    ////hDescriptor.Offset(mTextures[name]->Index, ptr_d3dWidget->m_cbv_srv_uavDescriptorSize);
-    //D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-    //srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    //srvDesc.Format = mResource->GetDesc().Format;
-    //srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-    //srvDesc.Texture2D.MostDetailedMip = 0;
-    //srvDesc.Texture2D.MipLevels = mResource->GetDesc().MipLevels;
-    //srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
-    //// Create Resource View
-    //device->CreateShaderResourceView(mResource.Get(), &srvDesc, hDescriptor);
+void D3DModules::RenderTargetTexture::CaptureTexture(ID3D12GraphicsCommandList* ptr_CommandList)
+{
+    DirectX::SaveWICTextureToFile(
+        MMModule->synchronizer->GetMainQueue(),
+        mResource.Get(),
+        GUID_ContainerFormatBmp,
+        L"output.bmp"
+    );
+}
+
+void D3DModules::RenderTargetTexture::SaveToFile()
+{
+    std::string filename = "hello.jpg";
+
+    MMModule->synchronizer->SynchronizeMainQueue();
+    // The code below assumes that the GPU wrote FLOATs to the buffer.
+    D3D12_RANGE readbackBufferRange{ 0, mResource->GetDesc().Width * mResource->GetDesc().Height };
+
+    DXCall(
+        readbackBuffer->Map
+        (
+            0,
+            &readbackBufferRange,
+            reinterpret_cast<void**>(&pReadbackBufferData)
+        )
+    );
+    Debug::Log(QString::number(pReadbackBufferData[0]));
+    //const auto desc = mResource->GetDesc();
 }
 
 //======================================================================================
@@ -100,7 +121,7 @@ void D3DModules::RenderTargetSubmodule::CreateRTVHeap(UINT num)
     {
         for (int i = 0; i < num - 2; i++)
         {
-            mRenderTarget["Assist" + std::to_string(i)] = std::make_unique<RenderTarget>
+            mRenderTarget["Assist" + std::to_string(i)] = std::make_unique<RenderTargetTexture>
                 (width, height, DXGI_FORMAT_R8G8B8A8_UNORM, i, MMModule);
         }
     }

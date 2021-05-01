@@ -9,9 +9,12 @@ using namespace DirectX;
 
 class QDirect3D12Widget;
 
+class CudaManager;
+
 class Camera
 {
 public:
+	friend class CudaManager;
 	float speed = 100;
 
 	enum Mode {
@@ -43,17 +46,24 @@ public:
 	void OnMouseMove(QMouseEvent* event);
 
 	void ToggleMode();
+	void ToggleUseRT();
 
-	XMMATRIX& GetViewMatrix();
+	bool DoUseRT()
+	{
+		return useRT;
+	}
+
+	XMMATRIX GetViewMatrix();
 
 	void Update();
 
 	void Init()
 	{
+		camParas = new float[8];
 		m_pInputSystem->AddListeningMem(InputSystem::InputSystem::Pause, this, &Camera::ToggleMode);
+		m_pInputSystem->AddListeningMem(InputSystem::InputSystem::RTRender, this, &Camera::ToggleUseRT);
 	}
 
-	DirectX::XMFLOAT4X4 mView = MathHelper::Identity4x4();
 	DirectX::XMFLOAT4X4 mProj = MathHelper::Identity4x4();
 
 private:
@@ -74,4 +84,9 @@ private:
 	Transform transform;
 
 	XMVECTOR GetInputTranslationDirection();
+
+	// Ray Tracing Part
+	bool useRT = false;
+	bool camUpdate = true;
+	float* camParas = nullptr;
 };

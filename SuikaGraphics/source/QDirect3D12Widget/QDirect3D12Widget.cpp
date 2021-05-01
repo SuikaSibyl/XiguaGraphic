@@ -63,8 +63,10 @@ bool QDirect3D12Widget::Initialize()
 		m_CommandQueue->ExecuteCommandLists(_countof(cmdLists), cmdLists);
 
 		// Wait until initialization is complete.
-		FlushCmdQueue();
-
+		m_SynchronizationModule->SetMainCommandQueue(m_CommandQueue);
+		m_SynchronizationModule->SynchronizeMainQueue();
+		//m_SynchronizationModule->FlushCmdQueue(m_CommandQueue);
+		m_CudaManagerModule->InitSynchronization(m_SynchronizationModule.get());
 		// Releasde uploader resource
 		RIManager.DisposeAllUploaders();
 	}
@@ -91,28 +93,16 @@ float GetWave(float x, float z, float t) {
 /// </summary>
 void QDirect3D12Widget::Update()
 {
-	// Cycle through the circular frame resource array.
-	currFrameResourcesIndex = (currFrameResourcesIndex + 1) % frameResourcesCount;
-	mCurrFrameResource = FrameResourcesArray[currFrameResourcesIndex].get();
-	// Has the GPU finished processing the commands of the current frame resource.
-	// If not, wait until the GPU has completed commands up to this fence point.
-	//如果GPU端围栏值小于CPU端围栏值，即CPU速度快于GPU，则令CPU等待
-	if (mCurrFrameResource->fenceCPU != 0 && m_fence->GetCompletedValue() < mCurrFrameResource->fenceCPU)
-	{
-		HANDLE eventHandle = CreateEvent(nullptr, false, false, L"FenceSetDone");
-		ThrowIfFailed(m_fence->SetEventOnCompletion(mCurrFrameResource->fenceCPU, eventHandle));
-		WaitForSingleObject(eventHandle, INFINITE);
-		CloseHandle(eventHandle);
-	}
+	m_SynchronizationModule->StartUpdate();
+	mCurrFrameResource = m_SynchronizationModule->mCurrFrameResource;
 
 	ObjectConstants objConstants;
 	PassConstants passConstants;
 
 	MainCamera.Update();
 	XMMATRIX view = MainCamera.GetViewMatrix();
-	XMStoreFloat4x4(&MainCamera.mView, view);
+	//XMStoreFloat4x4(&MainCamera.mView, view);
 	XMMATRIX proj = XMLoadFloat4x4(&MainCamera.mProj);
-
 	XMMATRIX viewProj = view * proj;
 	// Update the constant buffer with the latest worldViewProj matrix.
 	passConstants.gTime = m_tGameTimer.GetTotalTime();
@@ -190,9 +180,7 @@ void QDirect3D12Widget::Draw()
 	// We can only reset when the associated command lists have finished
 	// execution on the GPU.
 	auto currCmdAllocator = mCurrFrameResource->cmdAllocator;
-	DXCall(currCmdAllocator->Reset());//重复使用记录命令的相关内存
-	DXCall(m_CommandList->Reset(currCmdAllocator.Get(), RIManager.mPSOs["opaque"].Get()));//复用命令列表及其内存
-
+	m_WorkSubmissionModule->ResetCommandList(m_CommandList, currCmdAllocator.Get(), RIManager.mPSOs["opaque"].Get());
 	m_MemoryManagerModule->StartNewFrame();
 
 	//ID3D12DescriptorHeap* descriptorHeaps[] = { m_cbvHeap.Get() };
@@ -230,6 +218,7 @@ void QDirect3D12Widget::Draw()
 	skyTexDescriptor.Offset(RIManager.mMaterials["sky"]->DiffuseSrvHeapIndex, m_cbv_srv_uavDescriptorSize);
 	m_CommandList->SetGraphicsRootDescriptorTable(4, skyTexDescriptor);
 
+	//m_MemoryManagerModule->ResetRenderTarget(true);
 	m_MemoryManagerModule->ResetRenderTarget(false, 0);
 
 	//分别设置PSO并绘制对应渲染项
@@ -237,7 +226,11 @@ void QDirect3D12Widget::Draw()
 	DrawRenderItems(RenderQueue::Opaque);
 
 	m_MemoryManagerModule->ResetRenderTarget(true);
-	m_MemoryManagerModule->GrabScreen();
+	if (InputSys.KeyboardPressed[InputSystem::InputTypes::PrtScreen])
+	{
+		Debug::Log("Print screen");
+		m_MemoryManagerModule->GrabScreen();
+	}
 
 	m_CommandList->SetPipelineState(RIManager.mPSOs["alphaTest"].Get());
 	DrawRenderItems(RenderQueue::AlphaTest);
@@ -249,9 +242,16 @@ void QDirect3D12Widget::Draw()
 	m_CommandList->SetPipelineState(RIManager.mPSOs["Skybox"].Get());
 	DrawRenderItems(RenderQueue::Skybox);
 
+	////绘制渲染项
+	if (MainCamera.DoUseRT())
+	{
+		m_CommandList->SetPipelineState(RIManager.mPSOs["Texture"].Get());
+		DrawRenderItems(RenderQueue::PostProcessing);
+		m_CudaManagerModule->MoveToNextFrame(&MainCamera);
+	}
+
 	m_MemoryManagerModule->EndNewFrame();
-	// 完成命令的记录关闭命令列表 
-	ThrowIfFailed(m_CommandList->Close());
+	DXCall(m_CommandList->Close());
 
 	// Add the command list to the queue for execution.
 	//等CPU将命令都准备好后，需要将待执行的命令列表加入GPU的命令队列。使用的是ExecuteCommandLists函数。
@@ -261,22 +261,9 @@ void QDirect3D12Widget::Draw()
 	// swap the back and front buffers
 	ThrowIfFailed(m_SwapChain->Present(0, 0));
 
-	//// Wait until frame commands are complete. This waiting is
-	//// inefficient and is done for simplicity. Later we will show how to
-	//// organize our rendering code so we do not have to wait per frame.
-	//FlushCmdQueue();
-
-	// Advance the fence value to mark commands up to this fence point.
-	mCurrFrameResource->fenceCPU = ++mCurrentFence;
-	// Add an instruction to the command queue to set a new fence point.
-	// Because we are on the GPU timeline, the new fence point won’t be
-	// set until the GPU finishes processing all the commands prior to
-	// this Signal().
-	m_CommandQueue->Signal(m_fence.Get(), mCurrentFence);
-	// Note that GPU could still be working on commands from previous
-	// frames, but that is okay, because we are not touching any frame
-	// resources associated with those frames.
+	m_SynchronizationModule->EndUpdate(m_CommandQueue);
 }
+
 void QDirect3D12Widget::DrawRenderItems(RenderQueue queue)
 {
 	//将智能指针数组转换成普通指针数组
@@ -402,6 +389,7 @@ void QDirect3D12Widget::BuildShadersAndInputLayout()
 {
 	RIManager.mShaders["common"] = std::make_unique<Shader>(m_d3dDevice, L"Color");
 	RIManager.mShaders["skybox"] = std::make_unique<Shader>(m_d3dDevice, L"Skybox");
+	RIManager.mShaders["texture"] = std::make_unique<Shader>(m_d3dDevice, L"Texture");
 }
 
 void QDirect3D12Widget::BuildTexture()
@@ -414,10 +402,13 @@ void QDirect3D12Widget::BuildTexture()
 	RIManager.PushTexture("test", L"test.bmp");
 	RIManager.PushTexture("ueno", L"IBL/Newport_Loft_8k.jpg");
 	RIManager.PushTexture("env", L"IBL/Newport_Loft_Env.hdr");
+	// Cuda texture
+	RIManager.PushTextureCuda("cuda", (unsigned int)width(), (unsigned int)height());
 	// Cubemap texture
 	RIManager.PushTexture("cubeenv", L"Cubemaps/skybox/sky.jpg", true);
 	// Create SRV
 	//RIManager.CreateTextureSRV();
+	m_MemoryManagerModule->SetSynchronizer(m_SynchronizationModule.get());
 	m_MemoryManagerModule->InitSRVHeap(&RIManager);
 }
 
@@ -444,13 +435,22 @@ void QDirect3D12Widget::BuildMaterial()
 	sky->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
 	sky->Roughness = 0.0f;
 
+	auto screen = std::make_unique<Material>();
+	screen->Name = "screen";
+	screen->MatCBIndex = 2;
+	screen->DiffuseAlbedo = XMFLOAT4(0.0f, 0.2f, 0.6f, 1.0f);
+	screen->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
+	screen->Roughness = 0.0f;
+
 	RIManager.mMaterials["grass"] = std::move(grass);
 	RIManager.mMaterials["water"] = std::move(water);
 	RIManager.mMaterials["sky"] = std::move(sky);
+	RIManager.mMaterials["screen"] = std::move(screen);
 
 	RIManager.SetTexture("grass", "grass");
 	RIManager.SetTexture("water", "water");
 	RIManager.SetTexture("sky", "cubeenv");
+	RIManager.SetTexture("screen", "cuda");
 }
 
 void QDirect3D12Widget::BuildGeometry()
@@ -459,7 +459,9 @@ void QDirect3D12Widget::BuildGeometry()
 	BuildMultiGeometry();
 	BuildLandGeometry();
 	BuildLakeGeometry();
+	BuildScreenCanvasGeometry();
 }
+
 float GetHeight(float x, float z) {
 	return 0.3f * (z * sinf(0.1f * x) + x * cosf(0.1f * z));
 }
@@ -527,6 +529,26 @@ void QDirect3D12Widget::BuildLakeGeometry()
 	wave = std::make_unique<Waves>(std::move(helper), vertices.size());
 
 	vertex_num = vertices.size();
+}
+
+void QDirect3D12Widget::BuildScreenCanvasGeometry()
+{
+	ProceduralGeometry::GeometryGenerator geoGen;
+	ProceduralGeometry::GeometryGenerator::MeshData screen = geoGen.CreateScreenQuad();
+
+	std::vector<Geometry::Vertex> box_vertices(screen.Vertices.size());
+	for (int i = 0; i < screen.Vertices.size(); i++)
+	{
+		box_vertices[i].Pos = screen.Vertices[i].Position;
+		box_vertices[i].Normal = screen.Vertices[i].Normal;
+		box_vertices[i].TexC = screen.Vertices[i].TexC;
+	}
+
+	MeshGeometryHelper helper(this);
+	helper.PushSubmeshGeometry("screen", box_vertices, screen.GetIndices16());
+	RIManager.AddGeometry("screen", helper.CreateMeshGeometry("screen"));
+	RenderItem* screenRitem = RIManager.AddRitem("screen", "screen", RenderQueue::PostProcessing);
+	screenRitem->material = RIManager.mMaterials["screen"].get();
 }
 
 void QDirect3D12Widget::BuildLights()
@@ -758,6 +780,7 @@ void QDirect3D12Widget::BuildPSO()
 	ThrowIfFailed(m_d3dDevice->CreateGraphicsPipelineState(&transparentPsoDesc,
 		IID_PPV_ARGS(&RIManager.mPSOs["transparent"])));
 
+	// 天空盒的PSO
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC skySpherePsoDesc = opaquePsoDesc;
 	skySpherePsoDesc.VS =
 	{
@@ -773,19 +796,23 @@ void QDirect3D12Widget::BuildPSO()
 	skySpherePsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 	ThrowIfFailed(m_d3dDevice->CreateGraphicsPipelineState(&skySpherePsoDesc,
 		IID_PPV_ARGS(&RIManager.mPSOs["Skybox"])));
-}
 
-void QDirect3D12Widget::BuildFrameResources()
-{
-	for (int i = 0; i < frameResourcesCount; i++)
+	// 平面的PSO
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC texturePsoDesc = opaquePsoDesc;
+	texturePsoDesc.VS =
 	{
-		FrameResourcesArray.push_back(std::make_unique<FrameResource>(
-			m_d3dDevice.Get(),
-			1,     //passCount
-			(UINT)RIManager.mAllRitems.size(),
-			(UINT)RIManager.mMaterials.size(),
-			vertex_num));	//objCount
-	}
+		reinterpret_cast<BYTE*>(RIManager.mShaders["texture"]->vsBytecode->GetBufferPointer()),
+		RIManager.mShaders["texture"]->vsBytecode->GetBufferSize()
+	};
+	texturePsoDesc.PS =
+	{
+		reinterpret_cast<BYTE*>(RIManager.mShaders["texture"]->psBytecode->GetBufferPointer()),
+		RIManager.mShaders["texture"]->psBytecode->GetBufferSize()
+	};
+	texturePsoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+	texturePsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	ThrowIfFailed(m_d3dDevice->CreateGraphicsPipelineState(&texturePsoDesc,
+		IID_PPV_ARGS(&RIManager.mPSOs["Texture"])));
 }
 
 #pragma region QtSlot
@@ -826,19 +853,6 @@ void QDirect3D12Widget::onResize()
 #pragma endregion
 
 #pragma region HelperFuncs
-void QDirect3D12Widget::FlushCmdQueue()
-{
-	mCurrentFence++;	//CPU传完命令并关闭后，将当前围栏值+1
-	m_CommandQueue->Signal(m_fence.Get(), mCurrentFence);	//当GPU处理完CPU传入的命令后，将fence接口中的围栏值+1，即fence->GetCompletedValue()+1
-	if (m_fence->GetCompletedValue() < mCurrentFence)	//如果小于，说明GPU没有处理完所有命令
-	{
-		HANDLE eventHandle = CreateEvent(nullptr, false, false, L"FenceSetDone");	//创建事件
-		m_fence->SetEventOnCompletion(mCurrentFence, eventHandle);//当围栏达到mCurrentFence值（即执行到Signal（）指令修改了围栏值）时触发的eventHandle事件
-		WaitForSingleObject(eventHandle, INFINITE);//等待GPU命中围栏，激发事件（阻塞当前线程直到事件触发，注意此Enent需先设置再等待，
-							   //如果没有Set就Wait，就死锁了，Set永远不会调用，所以也就没线程可以唤醒这个线程）
-		CloseHandle(eventHandle);
-	}
-}
 /// <summary>
 /// 
 /// </summary>
@@ -999,13 +1013,15 @@ void QDirect3D12Widget::CreateDevice()
 	// Init all modules using the device
 	m_WorkSubmissionModule = std::make_unique<D3DModules::WorkSubmissionModule>(m_d3dDevice.Get());
 	m_MemoryManagerModule = std::make_unique<D3DModules::MemoryManagerModule>(m_d3dDevice.Get());
+	m_SynchronizationModule = std::make_unique<D3DModules::SynchronizationModule>(m_d3dDevice.Get());
+	m_CudaManagerModule = std::make_unique<CudaManager>(m_dxgiFactory.Get(), m_d3dDevice.Get());
 }
 /// <summary>
 /// Initialize:: 2 Create the Fance
 /// </summary>
 void QDirect3D12Widget::CreateFence()
 {
-	DXCall(m_d3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence)));
+	m_SynchronizationModule->CreateFence();
 }
 /// <summary>
 /// Initialize:: 3 Create Descriptor Sizes
@@ -1077,6 +1093,12 @@ void QDirect3D12Widget::CreateSwapChain()
 	//利用DXGI接口下的工厂类创建交换链
 	ThrowIfFailed(m_dxgiFactory->CreateSwapChain(m_CommandQueue, &swapChainDesc, m_SwapChain.GetAddressOf()));
 }
+
+void QDirect3D12Widget::BuildFrameResources()
+{
+	m_SynchronizationModule->BuildFrameResources(&RIManager, vertex_num);
+}
+
 /// <summary>
 /// Initialize:: 7 Create the Descriptor Heaps
 /// Initialize:: 8 Create Render Target View
@@ -1283,68 +1305,4 @@ bool QDirect3D12Widget::winEvent(MSG* message, long* result)
 
 #pragma region Deprecated
 
-//void QDirect3D12Widget::BuildDescriptorHeaps()
-//{
-//	UINT objectCount = (UINT)RIManager.mAllRitems.size();//物体总个数（包括实例）
-//
-//	// 创建Descriptor heap, 并创建CBV
-//	// 首先创建cbv堆
-//	D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc;
-//	cbvHeapDesc.NumDescriptors = (objectCount + 1) * frameResourcesCount;
-//	cbvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-//	cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-//	cbvHeapDesc.NodeMask = 0;
-//	ThrowIfFailed(m_d3dDevice->CreateDescriptorHeap(&cbvHeapDesc, IID_PPV_ARGS(m_cbvHeap.GetAddressOf())));
-//}
-
-//void QDirect3D12Widget::BuildConstantBuffers()
-//{
-//	// Create Object CBV
-//	// ----------------------
-//	UINT objectCount = (UINT)RIManager.mAllRitems.size();//物体总个数（包括实例）
-//	UINT objCBByteSize = Utils::CalcConstantBufferByteSize(sizeof(ObjectConstants));
-//	//D3D12_GPU_VIRTUAL_ADDRESS objCbAddress = mObjectCB->Resource()->GetGPUVirtualAddress();
-//	//// Offset to the ith object constant buffer in the buffer.
-//	//// Here our i = 0.
-//	for (int frameIndex = 0; frameIndex < frameResourcesCount; frameIndex++)
-//	{
-//		for (int i = 0; i < objectCount; i++)
-//		{
-//			D3D12_GPU_VIRTUAL_ADDRESS objCB_Address;
-//			objCB_Address = FrameResourcesArray[frameIndex]->objCB->Resource()->GetGPUVirtualAddress();
-//			objCB_Address += i * objCBByteSize;//子物体在常量缓冲区中的地址
-//			int heapIndex = objectCount * frameIndex + i;	//CBV堆中的CBV元素索引
-//			auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetCPUDescriptorHandleForHeapStart());//获得CBV堆首地址
-//			handle.Offset(heapIndex, m_cbv_srv_uavDescriptorSize);	//CBV句柄（CBV堆中的CBV元素地址）
-//			//创建CBV描述符
-//			D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
-//			cbvDesc.BufferLocation = objCB_Address;
-//			cbvDesc.SizeInBytes = objCBByteSize;
-//			m_d3dDevice->CreateConstantBufferView(&cbvDesc, handle);
-//		}
-//	}
-//
-//	// Create Pass CBV
-//	// ----------------------
-//	UINT passCBByteSize = Utils::CalcConstantBufferByteSize(sizeof(PassConstants));
-//
-//	for (int frameIndex = 0; frameIndex < frameResourcesCount; frameIndex++)
-//	{
-//		D3D12_GPU_VIRTUAL_ADDRESS passCbAddress;
-//		passCbAddress = FrameResourcesArray[frameIndex]->passCB->Resource()->GetGPUVirtualAddress();;
-//		// Offset to the ith object constant buffer in the buffer.
-//		// Here our i = 0.
-//		int passCbElementIndex = 0;
-//		passCbAddress += passCbElementIndex * passCBByteSize;
-//
-//		int heapIndex = objectCount * frameResourcesCount + frameIndex;
-//		auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_cbvHeap->GetCPUDescriptorHandleForHeapStart());
-//		handle.Offset(heapIndex, m_cbv_srv_uavDescriptorSize);
-//		//创建CBV描述符
-//		D3D12_CONSTANT_BUFFER_VIEW_DESC passCbvDesc;
-//		passCbvDesc.BufferLocation = passCbAddress;
-//		passCbvDesc.SizeInBytes = passCBByteSize;
-//		m_d3dDevice->CreateConstantBufferView(&passCbvDesc, handle);
-//	}
-//}
 #pragma endregion

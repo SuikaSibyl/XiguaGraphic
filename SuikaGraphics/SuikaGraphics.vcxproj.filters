@@ -88,6 +88,15 @@
     <Filter Include="Source Files\D3DModules">
       <UniqueIdentifier>{3654d2c0-a074-47a6-8b69-8b04f9d53fc8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\Cuda">
+      <UniqueIdentifier>{6d51ec41-d2c3-4f13-9a92-a6c7517fec18}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Cuda">
+      <UniqueIdentifier>{37e747e9-2b04-4d74-bf69-d6a4913bedec}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Cuda Files">
+      <UniqueIdentifier>{54baa254-13cc-49e1-944c-cffc810423cd}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="SuikaGraphics.qrc">
@@ -157,6 +166,15 @@
     </ClCompile>
     <ClCompile Include="source\D3DModules\MemoryManagerModule.cpp">
       <Filter>Source Files\D3DModules</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Cuda\CudaManager.cpp">
+      <Filter>Source Files\Cuda</Filter>
+    </ClCompile>
+    <ClCompile Include="source\D3DModules\SynchronizationModule.cpp">
+      <Filter>Source Files\D3DModules</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Texture\ScreenGrab.cpp">
+      <Filter>Source Files\Texture</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -244,21 +262,54 @@
     <ClInclude Include="header\MemoryManagerModule.h">
       <Filter>Header Files\D3DModules</Filter>
     </ClInclude>
+    <ClInclude Include="header\CudaManager.h">
+      <Filter>Header Files\Cuda</Filter>
+    </ClInclude>
+    <ClInclude Include="header\CudaUtil.h">
+      <Filter>Header Files\Cuda</Filter>
+    </ClInclude>
+    <ClInclude Include="header\CudaFunc.h">
+      <Filter>Header Files\Cuda</Filter>
+    </ClInclude>
+    <ClInclude Include="header\SynchronizationModule.h">
+      <Filter>Header Files\D3DModules</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource\Cudas\helper_math.h">
+      <Filter>Cuda Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource\Cudas\RTUtils.cuh">
+      <Filter>Cuda Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource\Cudas\Utility.cuh">
+      <Filter>Cuda Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource\Cudas\DevMaterial.cuh">
+      <Filter>Cuda Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource\Cudas\HitableList.cuh">
+      <Filter>Cuda Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource\Cudas\Sphere.cuh">
+      <Filter>Cuda Files</Filter>
+    </ClInclude>
+    <ClInclude Include="header\ScreenGrab.h">
+      <Filter>Header Files\Texture</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <QtMoc Include="source\QDirect3D12Widget\QDirect3D12Widget.h">
-      <Filter>Source Files\QDirect3D12Widget</Filter>
-    </QtMoc>
     <QtMoc Include="header\SuikaGraphics.h">
       <Filter>Header Files\Basement</Filter>
     </QtMoc>
+    <QtMoc Include="source\QDirect3D12Widget\QDirect3D12Widget.h">
+      <Filter>Source Files\QDirect3D12Widget</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="shader\Color.hlsl">
-      <Filter>Shader Files</Filter>
-    </FxCompile>
-    <FxCompile Include="shader\LightingUtils.hlsl">
-      <Filter>Shader Files</Filter>
-    </FxCompile>
+    <CudaCompile Include="Resource\Cudas\main.cu">
+      <Filter>Cuda Files</Filter>
+    </CudaCompile>
+    <CudaCompile Include="Resource\Cudas\RTUtils.cu">
+      <Filter>Cuda Files</Filter>
+    </CudaCompile>
   </ItemGroup>
 </Project>

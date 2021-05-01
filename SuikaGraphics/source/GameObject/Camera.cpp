@@ -61,7 +61,7 @@ void Camera::OnMouseMove(QMouseEvent* event)
 	}
 }
 
-XMMATRIX& Camera::GetViewMatrix()
+XMMATRIX Camera::GetViewMatrix()
 {
 	XMMATRIX view;
 
@@ -76,7 +76,38 @@ XMMATRIX& Camera::GetViewMatrix()
 	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 	view = XMMatrixLookAtLH(pos, target, up);
 
-	return view;
+	if (camParas[0] != pos_x)
+	{
+		camParas[0] = pos_x;
+		camUpdate = true;
+	}
+	if (camParas[1] != pos_y)
+	{
+		camParas[1] = pos_y;
+		camUpdate = true;
+	}
+	if (camParas[2] != pos_z)
+	{
+		camParas[2] = pos_z;
+		camUpdate = true;
+	}
+	if (camParas[3] != pos_x + x)
+	{
+		camParas[3] = pos_x + x;
+		camUpdate = true;
+	}
+	if (camParas[4] != pos_y + y)
+	{
+		camParas[4] = pos_y + y;
+		camUpdate = true;
+	}
+	if (camParas[5] != pos_z + z)
+	{
+		camParas[5] = pos_z + z;
+		camUpdate = true;
+	}
+
+	return std::move(view);
 }
 
 void Camera::Update()
@@ -135,4 +166,9 @@ void Camera::ToggleMode()
 		mode = Focus;
 		SetMouseModeFocus();
 	}
+}
+
+void Camera::ToggleUseRT()
+{
+	useRT = !useRT;
 }

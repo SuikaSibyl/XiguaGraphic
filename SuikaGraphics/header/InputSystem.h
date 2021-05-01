@@ -25,6 +25,8 @@ public:
 		Up,
 		Down,
 		Pause,
+		RTRender,
+		PrtScreen,
 	};
 
 	InputSystem()
@@ -47,7 +49,6 @@ public:
 
 	void KeyPressed(QKeyEvent* event)
 	{
-		Debug::Log("KeyPressed");
 		InputTypes inputType = MapKey2InputType[event->key()];
 		KeyboardPressed[inputType] = true;
 		(*MapKey2Delegate[inputType])();
@@ -55,7 +56,6 @@ public:
 
 	void KeyReleased(QKeyEvent* event)
 	{
-		Debug::LogError("KeyRelease");
 		KeyboardPressed[MapKey2InputType[event->key()]] = false;
 	}
 
@@ -81,6 +81,8 @@ private:
 		Up,
 		Down,
 		Pause,
+		RTRender,
+		PrtScreen,
 	};
 
 	vector<std::pair<int, InputTypes>> m_Key2InputType{
@@ -91,5 +93,7 @@ private:
 		{Qt::Key_Q, Down},
 		{Qt::Key_E, Up},
 		{Qt::Key_Escape, Pause},
+		{Qt::Key_Space, RTRender},
+		{Qt::Key_F1, PrtScreen},
 	};
 };

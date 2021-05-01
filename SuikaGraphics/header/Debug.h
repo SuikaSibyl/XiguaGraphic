@@ -10,6 +10,7 @@ public:
 
 	static void Log(QString info);
 	static void LogError(QString info);
+	static void LogSystem(QString info);
 
 	void SetSuikaGraphics(SuikaGraphics* suikaGraphics)
 	{
@@ -18,6 +19,7 @@ public:
 
 	void m_Log(QString string);
 	void m_LogError(QString string);
+	void m_LogSystem(QString info);
 
 private:
 	Debug() {};

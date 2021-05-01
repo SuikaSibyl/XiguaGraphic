@@ -19,6 +19,7 @@ public:
 
 	std::unique_ptr<Texture> CreateCubemapTexture(std::string name, std::wstring filepath);
 	std::unique_ptr<Texture> CreateTexture(std::string name, std::wstring filepath);
+	std::unique_ptr<Texture> CreateCudaTexture(std::string name, UINT m_width, UINT m_height);
 
 private:
 	QDirect3D12Widget* m_qd3dWidget;

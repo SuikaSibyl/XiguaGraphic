@@ -1,6 +1,7 @@
 #include <TextureHelper.h>
 #include <QDirect3D12Widget.h>
 #include <Utility.h>
+#include <minwinbase.h>
 
 using namespace IMG;
 
@@ -329,6 +330,73 @@ std::unique_ptr<Texture> TextureHelper::CreateTexture(std::string name, std::wst
 	}
 
 	return std::move(Tex);
+}
+
+std::unique_ptr<Texture> TextureHelper::CreateCudaTexture(std::string name, UINT m_width, UINT m_height)
+{
+	std::unique_ptr<Texture> Tex = std::make_unique<Texture>();
+	Tex->Channels = 4;
+	Tex->Width = m_width;
+	Tex->Height = m_height;
+
+	const auto textureSurface = Tex->Width * Tex->Height;
+	const auto texturePixels = textureSurface * Tex->Channels;
+	const auto textureSizeBytes = sizeof(float) * texturePixels;
+
+	const auto texFormat = Tex->Channels == 4 ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_R32G32B32_FLOAT;
+	const auto texDesc = CD3DX12_RESOURCE_DESC::Tex2D(texFormat, Tex->Width, Tex->Height, 1, 1, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS);
+	ThrowIfFailed(m_d3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_SHARED,
+		&texDesc, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, nullptr, IID_PPV_ARGS(&Tex->Resource)));
+	//NAME_D3D12_OBJECT(TextureArray);
+
+	//D3D12_RESOURCE_DESC textureDesc{};
+	//textureDesc.MipLevels = 1;
+	//textureDesc.Format = DXGI_FORMAT_R32G32B32_FLOAT;
+	//textureDesc.Width = Tex->Width;
+	//textureDesc.Height = Tex->Height;
+	//textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+	//textureDesc.DepthOrArraySize = 1;
+	//textureDesc.SampleDesc.Count = 1;
+	//textureDesc.SampleDesc.Quality = 0;
+	//textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+
+	////默认堆
+	//// 创建默认堆。纹理资源的堆分很多种类型，默认堆，上传堆，默认堆上的纹理资源权限是GPUAvailable，CPUUnAvailable的。
+	//D3D12_HEAP_PROPERTIES heap;
+	//memset(&heap, 0, sizeof(heap));
+	//heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+	////这里创建的时候就指认了COPY_DEST状态，所以在最后要用资源屏障把它重新弄成只读
+	//ThrowIfFailed(m_d3dDevice->CreateCommittedResource(
+	//	&heap,
+	//	D3D12_HEAP_FLAG_SHARED,
+	//	&textureDesc,
+	//	D3D12_RESOURCE_STATE_COPY_DEST,
+	//	nullptr,
+	//	IID_PPV_ARGS(&Tex->Resource)
+	//));
+
+	//ThrowIfFailed(m_d3dDevice->CreateCommittedResource(
+	//	&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT)
+	//	D3D12_HEAP_FLAG_SHARED,
+	//	&textureDesc,
+	//	D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, nullptr, IID_PPV_ARGS(&m_textureBuffer)));
+	//NAME_D3D12_OBJECT(m_textureBuffer);
+
+	Tex->bindCuda = true;
+
+	m_qd3dWidget->m_CudaManagerModule->SetTexture(Tex.get(), &texDesc);
+	return std::move(Tex);
+	//// Describe and create a SRV for the texture.
+	//{
+	//	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+	//	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	//	srvDesc.Format = textureDesc.Format;
+	//	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	//	srvDesc.Texture2D.MipLevels = 1;
+	//	m_device->CreateShaderResourceView(m_textureBuffer.Get(), &srvDesc, m_srvHeap->GetCPUDescriptorHandleForHeapStart());
+	//	NAME_D3D12_OBJECT(m_srvHeap);
+	//}
 }
 
 std::array<CD3DX12_STATIC_SAMPLER_DESC, 6> TextureHelper::GetStaticSamplers()
