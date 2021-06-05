@@ -1,0 +1,3 @@
+[submodule "SuikaEngine/vendor/spdlog"]
+	path = SuikaEngine/vendor/spdlog
+	url = https://github.com/gabime/spdlog

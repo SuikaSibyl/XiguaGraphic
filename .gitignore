@@ -11,16 +11,11 @@
 *.userprefs
 
 # Build results
-[Dd]ebug/
-[Dd]ebugPublic/
-[Rr]elease/
-[Rr]eleases/
-x64/
-x86/
-bld/
-[Bb]in/
-[Oo]bj/
-[Ll]og/
+/bin/
+/bin-int/
+
+# Resources
+/Resources/
 
 # Visual Studio 2019 cache/options directory
 .vs/
