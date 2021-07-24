@@ -82,14 +82,14 @@
     <OutDir>$(SolutionDir)bin\$(Configuration)-$(Platform)\$(ProjectName)\</OutDir>
     <IntDir>$(SolutionDir)bin-int\$(Configuration)-$(Platform)\$(ProjectName)\</IntDir>
     <IncludePath>$(SolutionDir)SuikaEngine\source\QDirect3D12Widget;D:\qt5.14\qt\5.14.2\msvc2017_64\include;E:\Qt\5.12.10\msvc2017_64\include;$(SolutionDir)SuikaEngine\header;$(SolutionDir)SuikaEngine\Resource\Cudas;$(SolutionDir)SuikaEngine\cuda;$(SolutionDir)SuikaEngine\thirdparty\spdlog\include;$(SolutionDir)SuikaEngine\thirdparty;$(SolutionDir)bin-int\Release-x64\SuikaEngine\uic;$(SolutionDir)SuikaEngine\source;D:\qt5.14\qt\5.14.2\msvc2017_64\include\QtWidgets;D:\qt5.14\qt\5.14.2\msvc2017_64\include\QtCore;D:\qt5.14\qt\5.14.2\msvc2017_64\include\QtGui;$(SolutionDir)SuikaEngine\source\Cuda\cudas;$(IncludePath)</IncludePath>
-    <LibraryPath>E:\VisualStudio\vs2019\VC\Tools\MSVC\14.28.29910\lib\onecore\x64;E:\VisualStudio\2019\VC\Tools\MSVC\14.16.27023\lib\x64;$(LibraryPath)</LibraryPath>
+    <LibraryPath>$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)bin\$(Configuration)-$(Platform)\$(ProjectName)\</OutDir>
     <IntDir>$(SolutionDir)bin-int\$(Configuration)-$(Platform)\$(ProjectName)\</IntDir>
     <IncludePath>$(SolutionDir)SuikaEngine\source\QDirect3D12Widget;D:\qt5.14\qt\5.14.2\msvc2017_64\include;E:\Qt\5.12.10\msvc2017_64\include;$(SolutionDir)SuikaEngine\header;$(SolutionDir)SuikaEngine\Resource\Cudas;$(SolutionDir)SuikaEngine\cuda;$(SolutionDir)SuikaEngine\thirdparty\spdlog\include;$(SolutionDir)SuikaEngine\thirdparty;$(SolutionDir)bin-int\Release-x64\SuikaEngine\uic;$(SolutionDir)SuikaEngine\source;D:\qt5.14\qt\5.14.2\msvc2017_64\include\QtWidgets;D:\qt5.14\qt\5.14.2\msvc2017_64\include\QtCore;D:\qt5.14\qt\5.14.2\msvc2017_64\include\QtGui;$(SolutionDir)SuikaEngine\source\Cuda\cudas;$(IncludePath)</IncludePath>
-    <LibraryPath>E:\VisualStudio\vs2019\VC\Tools\MSVC\14.28.29910\lib\onecore\x64;E:\VisualStudio\2019\VC\Tools\MSVC\14.16.27023\lib\x64;$(LibraryPath)</LibraryPath>
+    <LibraryPath>$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
