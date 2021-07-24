@@ -1,9 +1,10 @@
 #pragma once
 #include <PipelineSetting.h>
-#include <FrameResources.h>
+#include <Platform/DirectX12/FrameResources.h>
 #include <Texture.h>
 #include <Shader.h>
 #include <memory>
+#include <Platform/DirectX12/StructuredBuffer.h>
 
 namespace D3DModules
 {
@@ -23,6 +24,21 @@ namespace D3DModules
 			m_Rootsignature = nullptr;
 			m_PSO = nullptr;
 			return;
+		}
+
+		void Execute(ID3D12GraphicsCommandList* cmdList, StructuredBuffer* buffer, int lightNum)
+		{
+			cmdList->SetPipelineState(m_PSO.Get());//执行横向计算着色器
+
+			std::vector<float> weights = { .1,.2,.4,.2,.1 };
+			cmdList->SetComputeRootSignature(m_Rootsignature);//绑定传至计算着色器的根签名
+			cmdList->SetComputeRoot32BitConstants(0, (UINT)weights.size(), weights.data(), 1);//设置根常量
+			cmdList->SetComputeRoot32BitConstants(0, 1, &lightNum, 0);//设置根常量
+			cmdList->SetComputeRootShaderResourceView(1,//根参数索引
+				light_addr);//子资源地址
+
+			cmdList->SetComputeRootDescriptorTable(2, buffer->gpuUav());//UAV绑定根描述符表
+			cmdList->Dispatch(4, 4, 4);//分派线程组
 		}
 
 		void Execute(ID3D12GraphicsCommandList* cmdList, WritableTexture* input)
@@ -51,6 +67,7 @@ namespace D3DModules
 
 		WritableTexture* ua1;
 		WritableTexture* ua2;
+		D3D12_GPU_VIRTUAL_ADDRESS light_addr;
 
 		CD3DX12_GPU_DESCRIPTOR_HANDLE srv;
 		CD3DX12_GPU_DESCRIPTOR_HANDLE uav;
@@ -78,6 +95,7 @@ namespace D3DModules
 		}
 
 		void BuildPostProcessRootSignature();
+		void BuildPolygonSHRootSignature();
 
 		void CreateComputeInstance(std::string name, std::string signature, std::wstring shadername, std::string csfunc = "CS");
 
@@ -96,6 +114,8 @@ namespace D3DModules
 	public:
 		ResourceBindingModule(ID3D12Device* d3dDevice);
 		ComputeSubmodule ComputeSub;
+
+		void CreateBuffer(uint sizeInBytes);
 	private:
 		ID3D12Device* m_d3dDevice;
 

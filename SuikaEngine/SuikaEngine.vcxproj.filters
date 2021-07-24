@@ -161,7 +161,7 @@
     <ClCompile Include="source\Scene\wave.cpp">
       <Filter>Source Files\Scene</Filter>
     </ClCompile>
-    <ClCompile Include="source\Pipeline\FrameResource.cpp">
+    <ClCompile Include="source\Platform\DirectX12\FrameResource.cpp">
       <Filter>Source Files\Pipeline</Filter>
     </ClCompile>
     <ClCompile Include="source\Texture\DDSTextureLoader.cpp">
@@ -182,7 +182,7 @@
     <ClCompile Include="source\D3DModules\MemoryManagerModule.cpp">
       <Filter>Source Files\D3DModules</Filter>
     </ClCompile>
-    <ClCompile Include="source\Cuda\CudaManager.cpp">
+    <ClCompile Include="source\Platform\Cuda\CudaManager.cpp">
       <Filter>Source Files\Cuda</Filter>
     </ClCompile>
     <ClCompile Include="source\D3DModules\SynchronizationModule.cpp">
@@ -218,13 +218,37 @@
     <ClCompile Include="source\testmain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="source\Suika\Application.cpp">
+    <ClCompile Include="source\Suika\Core\Application.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="source\Suika\Log.cpp">
+    <ClCompile Include="source\Suika\Core\Log.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="source\Geometry\Mesh.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Suika\Precompile\Precompiled.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Rendering\Lighting\PolygonLight.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Platform\DirectX12\StructuredBuffer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Core\Scene.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Suika\Core\Layer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Suika\Core\LayerStack.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Platform\Windows\WindowsWindow.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Physics\Fluid2D\fluid2d.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -250,7 +274,7 @@
     <ClInclude Include="header\GeometryGenerator.h">
       <Filter>Header Files\Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="header\FrameResources.h">
+    <ClInclude Include="source\Platform\DirectX12\FrameResources.h">
       <Filter>Header Files\Pipeline</Filter>
     </ClInclude>
     <ClInclude Include="header\RenderItemManagment.h">
@@ -307,7 +331,7 @@
     <ClInclude Include="header\MemoryManagerModule.h">
       <Filter>Header Files\D3DModules</Filter>
     </ClInclude>
-    <ClInclude Include="header\CudaManager.h">
+    <ClInclude Include="source\Platform\Cuda\CudaManager.h">
       <Filter>Header Files\Cuda</Filter>
     </ClInclude>
     <ClInclude Include="header\SynchronizationModule.h">
@@ -322,7 +346,7 @@
     <ClInclude Include="header\ResourceBindingModule.h">
       <Filter>Header Files\D3DModules</Filter>
     </ClInclude>
-    <ClInclude Include="header\UploadBuffer.h">
+    <ClInclude Include="source\Platform\DirectX12\UploadBuffer.h">
       <Filter>Header Files\Utility</Filter>
     </ClInclude>
     <ClInclude Include="header\CudaPathTracer.h">
@@ -337,13 +361,13 @@
     <ClInclude Include="source\Cuda\cudas\RTUtils.cuh">
       <Filter>Cuda Files\PathTracer</Filter>
     </ClInclude>
-    <ClInclude Include="source\Cuda\cudas\Sphere.cuh">
+    <ClInclude Include="source\Cuda\cudas\Hitable\Sphere.cuh">
       <Filter>Cuda Files\PathTracer</Filter>
     </ClInclude>
-    <ClInclude Include="source\Cuda\cudas\Triangle.cuh">
+    <ClInclude Include="source\Cuda\cudas\Hitable\Triangle.cuh">
       <Filter>Cuda Files\PathTracer</Filter>
     </ClInclude>
-    <ClInclude Include="source\Cuda\cudas\TriangleModel.h">
+    <ClInclude Include="source\Cuda\cudas\Hitable\TriangleModel.h">
       <Filter>Cuda Files\PathTracer</Filter>
     </ClInclude>
     <ClInclude Include="source\Cuda\cudas\bvh.h">
@@ -358,7 +382,7 @@
     <ClInclude Include="source\Cuda\cudas\helper_math.h">
       <Filter>Cuda Files\PathTracer</Filter>
     </ClInclude>
-    <ClInclude Include="source\Cuda\cudas\HitableList.cuh">
+    <ClInclude Include="source\Cuda\cudas\Hitable\HitableList.cuh">
       <Filter>Cuda Files\PathTracer</Filter>
     </ClInclude>
     <ClInclude Include="source\Cuda\cudas\linear_algebra.h">
@@ -376,16 +400,16 @@
     <ClInclude Include="source\Cuda\cudas\RandUtils.cuh">
       <Filter>Cuda Files</Filter>
     </ClInclude>
-    <ClInclude Include="source\Suika\Log.h">
+    <ClInclude Include="source\Suika\Core\Log.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="source\Suika\Application.h">
+    <ClInclude Include="source\Suika\Core\Application.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="source\Suika\Core.h">
+    <ClInclude Include="source\Suika\Core\Core.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="source\Suika\EntryPoint.h">
+    <ClInclude Include="source\Suika\Core\EntryPoint.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="source\Suika.h">
@@ -400,6 +424,40 @@
     <ClInclude Include="header\Scene.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="source\Suika\Event\KeyEvent.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="source\Suika\Event\Event.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="source\Suika\Precompile\Precompiled.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="source\Rendering\Lighting\PolygonLight.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="source\Platform\DirectX12\StructuredBuffer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="source\Platform\DirectX12\Resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="source\Core\Scene.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="source\Suika\Core\Layer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="source\Suika\Core\LayerStack.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="source\Suika\Core\Window.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="source\Platform\Windows\WindowsWindow.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="source\Physics\Fluid2D\fluid2d.h" />
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="header\SuikaGraphics.h">
@@ -415,6 +473,9 @@
     </CudaCompile>
     <CudaCompile Include="source\Cuda\cudas\TriMeshLoader.cu">
       <Filter>Cuda Files\PathTracer</Filter>
+    </CudaCompile>
+    <CudaCompile Include="source\Physics\Fluid2D\fluid2d.cu">
+      <Filter>Source Files</Filter>
     </CudaCompile>
   </ItemGroup>
 </Project>

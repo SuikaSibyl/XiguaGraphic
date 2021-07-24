@@ -30,7 +30,7 @@ public:
 			D3D12_RESOURCE_STATE_GENERIC_READ,
 			nullptr,
 			IID_PPV_ARGS(&mUploadBuffer))); 
-		
+
 		// obtain a pointer to the resource data
 		ThrowIfFailed(mUploadBuffer->Map(0, nullptr, reinterpret_cast<void**>(&mMappedData)));
 		// We do not need to unmap until we are done with the resource. 

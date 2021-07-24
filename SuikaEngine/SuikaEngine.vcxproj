@@ -75,7 +75,7 @@
     <IncludePath>E:\Qt\5.12.10\msvc2017\include;.\header;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>.\source\QDirect3D12Widget;D:\qt5.14\qt\5.14.2\msvc2017_64\include;E:\Qt\5.12.10\msvc2017_64\include;.\header;.\cuda;.\source;.\source\Cuda\cudas;.\thirdparty;$(IncludePath)</IncludePath>
+    <IncludePath>.\source\QDirect3D12Widget;D:\qt5.14\qt\5.14.2\msvc2017_64\include;E:\Qt\5.12.10\msvc2017_64\include;.\header;.\cuda;.\source;.\source\Cuda\cudas;.\thirdparty;.\thirdparty\entt\include;.\source\Suika\Precompile;.\source\Suika;$(IncludePath)</IncludePath>
     <LibraryPath>.\libs;E:\VisualStudio\vs2019\VC\Tools\MSVC\14.28.29910\lib\onecore\x64;E:\VisualStudio\2019\VC\Tools\MSVC\14.16.27023\lib\x64;$(LibraryPath)</LibraryPath>
     <OutDir>$(SolutionDir)bin\$(Configuration)-$(Platform)\$(ProjectName)\</OutDir>
     <IntDir>$(SolutionDir)bin-int\$(Configuration)-$(Platform)\$(ProjectName)\</IntDir>
@@ -84,7 +84,7 @@
     <IncludePath>E:\Qt\5.12.10\msvc2017\include;.\header;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>.\source\QDirect3D12Widget;D:\qt5.14\qt\5.14.2\msvc2017_64\include;E:\Qt\5.12.10\msvc2017_64\include;.\header;.\cuda;.\source;.\source\Cuda\cudas;.\thirdparty;$(IncludePath)</IncludePath>
+    <IncludePath>.\source\QDirect3D12Widget;D:\qt5.14\qt\5.14.2\msvc2017_64\include;E:\Qt\5.12.10\msvc2017_64\include;.\header;.\cuda;.\source;.\source\Cuda\cudas;.\thirdparty;.\thirdparty\entt\include;.\source\Suika\Precompile;.\source\Suika;$(IncludePath)</IncludePath>
     <LibraryPath>.\libs;E:\VisualStudio\vs2019\VC\Tools\MSVC\14.28.29910\lib\onecore\x64;E:\VisualStudio\2019\VC\Tools\MSVC\14.16.27023\lib\x64;$(LibraryPath)</LibraryPath>
     <OutDir>$(SolutionDir)bin\$(Configuration)-$(Platform)\$(ProjectName)\</OutDir>
     <IntDir>$(SolutionDir)bin-int\$(Configuration)-$(Platform)\$(ProjectName)\</IntDir>
@@ -121,6 +121,9 @@
     <ClCompile>
       <AdditionalIncludeDirectories>./;../../common/inc;$(CudaToolkitDir)/include;$(SolutionDir)\SuikaEngine\thirdparty\spdlog\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>SUIKA_PLATFORM_WINDOWS;SUIKA_BUILD_DLL;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>Precompiled.h</PrecompiledHeaderFile>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <CudaCompile>
       <Include>./;../../common/inc</Include>
@@ -153,6 +156,9 @@
     <ClCompile>
       <AdditionalIncludeDirectories>./;../../common/inc;$(CudaToolkitDir)/include;$(SolutionDir)\SuikaEngine\thirdparty\spdlog\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>SUIKA_PLATFORM_WINDOWS;SUIKA_BUILD_DLL;NDEBUG;_CONSOLE;$(Qt_DEFINES_);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>Precompiled.h</PrecompiledHeaderFile>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
   </ItemDefinitionGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|Win32'" Label="QtSettings">
@@ -231,9 +237,14 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="source\Core\Scene.cpp" />
     <ClCompile Include="source\Cuda\cudas\bvh.cpp" />
     <ClCompile Include="source\Geometry\Loader.cpp" />
-    <ClCompile Include="source\Cuda\CudaManager.cpp" />
+    <CudaCompile Include="source\Physics\Fluid2D\fluid2d.cu">
+      <FileType>Document</FileType>
+    </CudaCompile>
+    <ClCompile Include="source\Physics\Fluid2D\fluid2d.cpp" />
+    <ClCompile Include="source\Platform\Cuda\CudaManager.cpp" />
     <ClCompile Include="source\Cuda\CudaPathTracer.cpp" />
     <ClCompile Include="source\D3DModules\MemoryManagerModule.cpp" />
     <ClCompile Include="source\D3DModules\ResourceBindingModule.cpp" />
@@ -245,10 +256,21 @@
     <ClCompile Include="source\Geometry\MeshGeometry.cpp" />
     <ClCompile Include="source\Geometry\ModelLoader.cpp" />
     <ClCompile Include="source\Interaction\InputSystem.cpp" />
-    <ClCompile Include="source\Suika\Application.cpp" />
-    <ClCompile Include="source\Suika\Log.cpp" />
+    <ClCompile Include="source\Platform\DirectX12\StructuredBuffer.cpp" />
+    <ClCompile Include="source\Platform\Windows\WindowsWindow.cpp" />
+    <ClCompile Include="source\Rendering\Lighting\PolygonLight.cpp" />
+    <ClCompile Include="source\Suika\Core\Application.cpp" />
+    <ClCompile Include="source\Suika\Core\Layer.cpp" />
+    <ClCompile Include="source\Suika\Core\LayerStack.cpp" />
+    <ClCompile Include="source\Suika\Core\Log.cpp" />
+    <ClCompile Include="source\Suika\Precompile\Precompiled.cpp">
+      <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Precompiled.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Precompiled.h</PrecompiledHeaderFile>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="source\testmain.cpp" />
-    <ClCompile Include="source\Pipeline\FrameResource.cpp" />
+    <ClCompile Include="source\Platform\DirectX12\FrameResource.cpp" />
     <ClCompile Include="source\QDirect3D12Widget\QDirect3D12Widget.cpp" />
     <ClCompile Include="source\QtInterface\main.cpp" />
     <ClCompile Include="source\QtInterface\SuikaGraphics.cpp" />
@@ -272,8 +294,10 @@
   <ItemGroup>
     <ClInclude Include="header\Mesh.h" />
     <ClInclude Include="header\Scene.h" />
+    <ClInclude Include="source\Core\Scene.h" />
     <ClInclude Include="source\Cuda\cudas\SphericalHarmonic.cuh" />
-    <ClInclude Include="header\CudaManager.h" />
+    <ClInclude Include="source\Physics\Fluid2D\fluid2d.h" />
+    <ClInclude Include="source\Platform\Cuda\CudaManager.h" />
     <ClInclude Include="header\CudaPrt.h" />
     <ClInclude Include="header\CudaUtil.h" />
     <ClInclude Include="header\DDSTextureLoader.h" />
@@ -301,24 +325,34 @@
     <ClInclude Include="source\Cuda\cudas\DevMaterial.cuh" />
     <ClInclude Include="source\Cuda\cudas\Geometry.h" />
     <ClInclude Include="source\Cuda\cudas\helper_math.h" />
-    <ClInclude Include="source\Cuda\cudas\HitableList.cuh" />
+    <ClInclude Include="source\Cuda\cudas\Hitable\HitableList.cuh" />
     <ClInclude Include="source\Cuda\cudas\linear_algebra.h" />
     <ClInclude Include="source\Cuda\cudas\RandUtils.cuh" />
     <ClInclude Include="source\Cuda\cudas\RTUtils.cuh" />
-    <ClInclude Include="source\Cuda\cudas\Sphere.cuh" />
-    <ClInclude Include="source\Cuda\cudas\Triangle.cuh" />
-    <ClInclude Include="source\Cuda\cudas\TriangleModel.h" />
+    <ClInclude Include="source\Cuda\cudas\Hitable\Sphere.cuh" />
+    <ClInclude Include="source\Cuda\cudas\Hitable\Triangle.cuh" />
+    <ClInclude Include="source\Cuda\cudas\Hitable\TriangleModel.h" />
     <ClInclude Include="source\Cuda\cudas\Utility.cuh" />
     <ClInclude Include="source\Options.h" />
+    <ClInclude Include="source\Rendering\Lighting\PolygonLight.h" />
+    <ClInclude Include="source\Platform\DirectX12\Resource.h" />
+    <ClInclude Include="source\Platform\DirectX12\StructuredBuffer.h" />
+    <ClInclude Include="source\Platform\Windows\WindowsWindow.h" />
     <ClInclude Include="source\Suika.h" />
-    <ClInclude Include="source\Suika\Application.h" />
-    <ClInclude Include="source\Suika\Core.h" />
-    <ClInclude Include="source\Suika\EntryPoint.h" />
-    <ClInclude Include="source\Suika\Log.h" />
+    <ClInclude Include="source\Suika\Core\Application.h" />
+    <ClInclude Include="source\Suika\Core\Core.h" />
+    <ClInclude Include="source\Suika\Core\Layer.h" />
+    <ClInclude Include="source\Suika\Core\LayerStack.h" />
+    <ClInclude Include="source\Suika\Core\EntryPoint.h" />
+    <ClInclude Include="source\Suika\Core\Window.h" />
+    <ClInclude Include="source\Suika\Event\Event.h" />
+    <ClInclude Include="source\Suika\Event\KeyEvent.h" />
+    <ClInclude Include="source\Suika\Core\Log.h" />
+    <ClInclude Include="source\Suika\Precompile\Precompiled.h" />
     <QtMoc Include="header\SuikaGraphics.h" />
     <ClInclude Include="header\Camera.h" />
     <ClInclude Include="header\d3dx12.h" />
-    <ClInclude Include="header\FrameResources.h" />
+    <ClInclude Include="source\Platform\DirectX12\FrameResources.h" />
     <ClInclude Include="header\GameTimer.h" />
     <ClInclude Include="header\GeometryGenerator.h" />
     <ClInclude Include="header\MathHelper.h" />
@@ -326,7 +360,7 @@
     <ClInclude Include="header\PipelineSetting.h" />
     <ClInclude Include="header\RenderItemManagment.h" />
     <ClInclude Include="header\Shader.h" />
-    <ClInclude Include="header\UploadBuffer.h" />
+    <ClInclude Include="source\Platform\DirectX12\UploadBuffer.h" />
     <ClInclude Include="header\Utility.h" />
     <QtMoc Include="source\QDirect3D12Widget\QDirect3D12Widget.h" />
   </ItemGroup>

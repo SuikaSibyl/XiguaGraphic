@@ -1,5 +1,6 @@
+#include <Precompiled.h>
 #include <Light.h>
-#include <FrameResources.h>
+#include <Platform/DirectX12/FrameResources.h>
 #include <RenderItemManagment.h>
 #include <PipelineSetting.h>
 

@@ -1,4 +1,5 @@
-#include <FrameResources.h>
+#include <Precompiled.h>
+#include "FrameResources.h"
 
 FrameResource::FrameResource(ID3D12Device* device, UINT passCount, UINT objCount, UINT materialCount, UINT dynamicCount)
 {

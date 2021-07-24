@@ -1,6 +1,8 @@
 #ifndef HITABLELISTH
 #define HITABLELISTH
 
+#include "RTUtils.cuh"
+
 class HitableList:public Hitable
 {
 public:

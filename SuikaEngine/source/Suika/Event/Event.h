@@ -3,7 +3,7 @@
 #include <string>
 #include <functional>
 
-#include "../core.h"
+#include <Suika/Core/Core.h>
 
 namespace Suika
 {

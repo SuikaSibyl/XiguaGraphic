@@ -1,6 +1,7 @@
 #ifndef __SHADER_COMMON__
 #define __SHADER_COMMON__
 
+#include "PolygonGrid.hlsl"
 #define MaxLights 16
 
 struct Light 
@@ -15,15 +16,21 @@ struct Light
 
 struct MaterialData
 {
+    // 0
     float4 gDiffuseAlbedo; //材质反照率
+    // 4
     float3 gFresnelR0; //RF(0)值，即材质的反射属性
     float gRoughness; //材质的粗糙度
+    // 8
     float4x4 gMatTransform; //UV动画变换矩阵
+    // 24
     uint gDiffuseMapIndex;//纹理数组索引
+    uint gNormalMapIndex;
+    uint gExtraMapIndex;
+    uint gMatType;
+    // 29
     float gMetalness;
     float3 gEmission; //RF(0)值，即材质的反射属性
-    uint gMatPad1;
-    uint gMatPad2;
 };
 
 TextureCube gCubeMap : register(t0);
@@ -38,6 +45,7 @@ Texture2D gDiffuseMap[4] : register(t2);//所有漫反射贴图
 // space0.
 //材质数据的结构化缓冲区，使用t0的space1空间
 StructuredBuffer<MaterialData> gMaterialData : register(t0, space1);
+StructuredBuffer<MyStruct> gPolygonSHData : register(t0, space2);
 
 //6个不同类型的采样器
 SamplerState gSamPointWrap : register(s0);
@@ -66,6 +74,9 @@ cbuffer cbPass : register(b1)
 	float4 gAmbientLight;
     float4x4 gShadowTransform;
 	Light gLights[MaxLights];
+	float4x4 gView;
+	float4x4 gProjection;
+	float4x4 gViewInverse;
 };
 
 struct VertexIn
@@ -74,6 +85,7 @@ struct VertexIn
     float3 Normal : NORMAL;
     float2 TexC : TEXCOORD;
     row_major float4x4 Transfer : TRANSFER;
+    row_major float4x4 Thiness : THINESS;
 };
 
 #endif

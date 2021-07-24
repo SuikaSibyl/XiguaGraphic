@@ -1,5 +1,5 @@
+#include <Precompiled.h>
 #include <SynchronizationModule.h>
-#include <memory>
 
 void D3DModules::SynchronizationModule::BuildFrameResources(RenderItemManager* RIManager, int vertex_num)
 {

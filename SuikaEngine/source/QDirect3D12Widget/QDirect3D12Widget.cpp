@@ -1,15 +1,9 @@
+#include <Precompiled.h>
 #include "QDirect3D12Widget.h"
 #include <DirectXColors.h>
 
-#include <array>
-#include <QDebug>
-#include <QEvent>
-#include <QWheelEvent>
-#include <DirectXMath.h>
-#include <QTime>
-
 #include <Shader.h>
-#include <UploadBuffer.h>
+#include <Platform/DirectX12/UploadBuffer.h>
 #include <GeometryGenerator.h>
 #include <SuikaGraphics.h>
 #include <Singleton.h>
@@ -21,9 +15,11 @@
 
 #include <CudaPrt.h>
 #include <Scene.h>
-#include <Options.h>
 
+#include <Platform/DirectX12/StructuredBuffer.h>
 
+#define THREELIGHT
+//#define MANYLIGHT
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
 using Geometry::RenderItem;
@@ -53,7 +49,10 @@ bool QDirect3D12Widget::Initialize()
 		std::cout << "Build Light finished" << std::endl;
 
 		m_MemoryManagerModule->RTDSSub.CreateWritableTexture("framebuffer", width(), height(), WritableTexture::WritableType::RenderTarget);
+		m_MemoryManagerModule->RTDSSub.CreateWritableTexture("framebuffer2", width(), height(), WritableTexture::WritableType::RenderTarget);
 		m_MemoryManagerModule->RTDSSub.CreateWritableTexture("framebuffer", width(), height(), WritableTexture::WritableType::DepthStencil);
+		m_MemoryManagerModule->RTDSSub.CreateWritableTexture("framebuffer3", width(), height(), WritableTexture::WritableType::RenderTarget);
+		m_MemoryManagerModule->RTDSSub.CreateWritableTexture("framebuffer3", width(), height(), WritableTexture::WritableType::DepthStencil);
 
 		std::cout << "Create Buffer finished" << std::endl;
 
@@ -77,7 +76,7 @@ bool QDirect3D12Widget::Initialize()
 		BuildGeometry();
 		// Init Frame Resource,must after all render items pushed;
 		// BuildFrameResources
-		m_SynchronizationModule->BuildFrameResources(&RIManager, vertex_num);
+		m_SynchronizationModule->BuildFrameResources(&RIManager, lightstack.CountVertex());
 		// Build Rootsignature
 		BuildRootSignature();
 		// Build PSOs
@@ -95,6 +94,8 @@ bool QDirect3D12Widget::Initialize()
 		m_CudaManagerModule->InitSynchronization(m_SynchronizationModule.get());
 		// Releasde uploader resource
 		RIManager.DisposeAllUploaders();
+
+		float* lightCoeff = m_CudaManagerModule->GetEnvCoeff();
 	}
 	catch (HrException& e)
 	{
@@ -119,12 +120,53 @@ float GetWave(float x, float z, float t) {
 /// </summary>
 void QDirect3D12Widget::Update()
 {
+	float time = m_tGameTimer.GetTotalTime();
+
+#ifdef MANYLIGHT
+	float vertices[9];
+	fluid2d.OnUpdate(time);
+	int max_v = fluid2d.VertexNum();
+	for (int i = 0; i < max_v; i++)
+	{
+		lightstack.SetTransform(i, fluid2d.GetTransform(i));
+	}
+#endif // MANYLIGHT
+
+#ifdef THREELIGHT
+	XMFLOAT3 scale(0.5 * cosf(time), 1, 1);
+	XMFLOAT3 scale3(0.5 * cosf(time), 0.5 * sinf(time), 0.5 * cosf(2 * time));
+	XMFLOAT3 scale2(0.5, 0.5, sinf(time));
+	XMFLOAT3 origin(0, 0, 0);
+	XMFLOAT4 rotation(0.5 * cosf(0.5 * time), 0.5 * sinf(0.5 * time), 0, 1);
+	XMFLOAT3 transform(-1.5, 0.5, 0);
+	XMFLOAT3 transform2(0, 1, -1 + 0.5 * cosf(0.5 * time));
+	XMFLOAT3 transform3(0, 2, 1);
+
+	lightstack.SetTransform(0, XMMatrixAffineTransformation(
+		XMLoadFloat3(&scale),
+		XMLoadFloat3(&origin),
+		XMLoadFloat4(&rotation),
+		XMLoadFloat3(&transform)));
+
+	lightstack.SetTransform(1, XMMatrixAffineTransformation(
+		XMLoadFloat3(&scale2),
+		XMLoadFloat3(&origin),
+		XMLoadFloat4(&rotation),
+		XMLoadFloat3(&transform2)));
+
+	lightstack.SetTransform(2, XMMatrixAffineTransformation(
+		XMLoadFloat3(&scale3),
+		XMLoadFloat3(&origin),
+		XMLoadFloat4(&rotation),
+		XMLoadFloat3(&transform3)));
+#endif // THREELIGHT
+
 	m_SynchronizationModule->StartUpdate();
 	mCurrFrameResource = m_SynchronizationModule->mCurrFrameResource;
 
 	ObjectConstants& objConstants = m_ResourceBindingModule->GetObjectConstants();
 	PassConstants& passConstants = m_ResourceBindingModule->GetPassConstants();
-
+	
 	MainCamera.Update();
 	RIManager.mLights["mainLit"]->UpdateLightView();
 
@@ -140,6 +182,9 @@ void QDirect3D12Widget::Update()
 	passConstants.light[2] = RIManager.mLights["Light2"]->basic;
 	passConstants.light[3] = RIManager.mLights["Light3"]->basic;
 	XMStoreFloat4x4(&passConstants.viewProj, XMMatrixTranspose(viewProj));
+	XMStoreFloat4x4(&passConstants.projection, XMMatrixTranspose(proj));
+	XMStoreFloat4x4(&passConstants.view, XMMatrixTranspose(view));
+	XMStoreFloat4x4(&passConstants.viewInverse, XMMatrixTranspose(MathHelper::InverseTranspose(view)));
 	XMMATRIX gShadowTransform = XMLoadFloat4x4(&RIManager.mLights["mainLit"]->mShadowTransform);
 	XMStoreFloat4x4(&passConstants.gShadowTransform, XMMatrixTranspose(gShadowTransform));
 	m_ResourceBindingModule->UpdatePassConstants(mCurrFrameResource);
@@ -162,20 +207,6 @@ void QDirect3D12Widget::Update()
 		}
 	}
 
-	// Update Wave
-	auto currWavesVB = mCurrFrameResource->dynamicVB.get();
-	vector<Vertex>& vertices = wave->helper.GetVertices();
-	for (int i = 0; i < vertex_num; i++)
-	{
-		vertices[i].Pos.y = GetWave(vertices[i].Pos.x, vertices[i].Pos.z, GameTimer::TotalTime());
-	}
-	wave->helper.CalcNormal();
-	for (int i = 0; i < vertex_num; i++)
-	{
-		currWavesVB->CopyData(i, vertices[i]);
-	}
-	RIManager.mGeometries["lakeGeo"]->VertexBufferGPU = currWavesVB->Resource();
-
 	// Update Material
 	auto currMatSB = mCurrFrameResource->materialSB.get();
 	for (auto& e : RIManager.mMaterials)
@@ -190,9 +221,12 @@ void QDirect3D12Widget::Update()
 			matData.roughness = mat->Roughness;
 			matData.metalness = mat->Metalness;
 			matData.emission = mat->Emission;
+			matData.materialType = mat->MaterialType;
 			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
 			XMStoreFloat4x4(&matData.matTransform, XMMatrixTranspose(matTransform));
 			matData.diffuseMapIndex = mat->DiffuseSrvHeapIndex;//纹理在SRV堆中索引
+			matData.normalMapIndex = mat->NormalSrvHeapIndex;//纹理在SRV堆中索引
+			matData.extraMapIndex = mat->ExtraSrvHeapIndex;//纹理在SRV堆中索引
 
 			//将材质常量数据复制到常量缓冲区对应索引地址处
 			currMatSB->CopyData(mat->MatCBIndex, matData);
@@ -200,6 +234,7 @@ void QDirect3D12Widget::Update()
 			mat->NumFramesDirty--;
 		}
 	}
+
 }
 
 /// <summary>
@@ -232,6 +267,17 @@ void QDirect3D12Widget::Draw()
 	ID3D12DescriptorHeap* descriptorHeaps[] = { m_srvHeap };
 	m_CommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
+	// Update PolygonLIGHT
+	// --------------------------------
+	// Update Polygon
+	auto currPolygonVB = mCurrFrameResource->dynamicVB.get();
+	lightstack.UpdateDynamicVB(currPolygonVB);
+	RIManager.mGeometries["PolygonLight"]->VertexBufferGPU = currPolygonVB->Resource();
+	//
+	D3DModules::ComputeInstance* polygonSH = m_ResourceBindingModule->ComputeSub.ComputeIns("PolygonSH");
+	polygonSH->light_addr = currPolygonVB->Resource()->GetGPUVirtualAddress();
+	polygonSH->Execute(m_CommandList, m_MemoryManagerModule->SRVSub.GetStructuredBuffer("test"), lightstack.CountLights());
+
 	//Set root signature
 	m_CommandList->SetGraphicsRootSignature(mRootSignature.Get());
 
@@ -241,6 +287,10 @@ void QDirect3D12Widget::Draw()
 	auto matSB = mCurrFrameResource->materialSB->Resource();
 	m_CommandList->SetGraphicsRootShaderResourceView(3,//根参数索引
 		matSB->GetGPUVirtualAddress());//子资源地址
+
+	// TESTTESTTESTTESTTESTTEST
+	m_CommandList->SetGraphicsRootShaderResourceView(6,//根参数索引
+		m_MemoryManagerModule->SRVSub.GetStructuredBuffer("test")->gpuAddr());//子资源地址
 
 	// Bind all the textures used in this scene.  Observe
 	// that we only have to specify the first descriptor in the table.  
@@ -285,7 +335,7 @@ void QDirect3D12Widget::Draw()
 	//	m_ResourceBindingModule->BindPassConstants(m_CommandList, mCurrFrameResource, 2);
 
 	//	// Draw
-		m_MemoryManagerModule->RTDSSub.RenderToTexture("framebuffer", "framebuffer");
+		m_MemoryManagerModule->RTDSSub.RenderToTexture("framebuffer", "framebuffer2", "framebuffer");
 	//	m_CommandList->SetPipelineState(RIManager.mPSOs["Skybox"].Get());
 	//	DrawRenderItems(RenderQueue::Skybox);
 
@@ -330,10 +380,11 @@ void QDirect3D12Widget::Draw()
 	m_CommandList->SetPipelineState(RIManager.mPSOs["Skybox"].Get());
 	DrawRenderItems(RenderQueue::Skybox);
 
+
 	////绘制渲染项
 	if (MainCamera.DoUseRT())
 	{
-		m_CudaManagerModule->MoveToNextFrame(&MainCamera);
+		//m_CudaManagerModule->MoveToNextFrame(&MainCamera);
 		m_MemoryManagerModule->RTDSSub.RenderToScreen();
 		m_CommandList->SetPipelineState(RIManager.mPSOs["Texture"].Get());
 		DrawRenderItems(RenderQueue::PostProcessing);
@@ -491,20 +542,31 @@ void QDirect3D12Widget::ContinueFrames()
 }
 
 #pragma region Initialize
+#define BuildShader(NAME, FILE) RIManager.mShaders[NAME] = std::make_unique<Shader>(m_d3dDevice.Get(), FILE)
+#define BuildComputeShader(NAME, FILE) RIManager.mShaders[NAME] = std::make_unique<Shader>(m_d3dDevice.Get(), FILE, true, "CS")
 
 void QDirect3D12Widget::BuildShadersAndInputLayout()
 {
-	RIManager.mShaders["common"] = std::make_unique<Shader>(m_d3dDevice.Get(), L"Color");
-	RIManager.mShaders["skybox"] = std::make_unique<Shader>(m_d3dDevice.Get(), L"Skybox");
-	RIManager.mShaders["texture"] = std::make_unique<Shader>(m_d3dDevice.Get(), L"Texture");
-	RIManager.mShaders["ShadowOpaque"] = std::make_unique<Shader>(m_d3dDevice.Get(), L"Shadow");
+	BuildShader("common", L"Color");
+	BuildShader("skybox", L"Skybox");
+	BuildShader("texture", L"SSDO");
+	BuildShader("ShadowOpaque", L"Shadow");
+	BuildShader("Unlit", L"Unlit");
+
+	//BuildComputeShader("PolygonSH", L"PolygonSH");
+
 	m_ResourceBindingModule->ComputeSub.BuildPostProcessRootSignature();
-	m_ResourceBindingModule->ComputeSub.CreateComputeInstance("HorizontalBlur", "PostProcessing", L"GaussianBlur", "HorzBlurCS");
-	m_ResourceBindingModule->ComputeSub.CreateComputeInstance("VerticalBlur", "PostProcessing", L"GaussianBlur", "VerticalBlurCS");
+	m_ResourceBindingModule->ComputeSub.BuildPolygonSHRootSignature();
+	m_ResourceBindingModule->ComputeSub.CreateComputeInstance("HorizontalBlur", "PostProcessing", L"compute\\GaussianBlur", "HorzBlurCS");
+	m_ResourceBindingModule->ComputeSub.CreateComputeInstance("VerticalBlur", "PostProcessing", L"compute\\GaussianBlur", "VerticalBlurCS");
+	m_ResourceBindingModule->ComputeSub.CreateComputeInstance("PolygonSH", "PolygonSH", L"PolygonSH", "CS");
 }
 
 void QDirect3D12Widget::BuildTexture()
 {
+	std::unique_ptr<StructuredBuffer> buffer = make_unique<SpecifiedStructuredBuffer<LightSH>>(32768, m_d3dDevice.Get());
+	m_MemoryManagerModule->SRVSub.PushStructuredBuffer("test", std::move(buffer));
+
 	// Texture2D texture
 	RIManager.PushTexture("lut", L"IBL_LUT.bmp");
 	RIManager.PushTexture("wood", L"WoodCrate01.dds");
@@ -590,38 +652,16 @@ void QDirect3D12Widget::BuildMaterial()
 	standard1->Metalness = .9;
 	standard1->Emission = XMFLOAT3(0, 0, 0);
 
-	auto standard2 = std::make_unique<Material>();
-	standard2->Name = "standard2";
-	standard2->MatCBIndex = 7;
-	standard2->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-	standard2->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
-	standard2->Roughness = 0;
-	standard2->Metalness = 1;
-	standard2->Emission = XMFLOAT3(0, 0, 0);
+	auto UnlitWhite = std::make_unique<Material>();
+	UnlitWhite->Name = "unlit_white";
+	UnlitWhite->MatCBIndex = 7;
+	UnlitWhite->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	UnlitWhite->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
+	UnlitWhite->Roughness = 1;
+	UnlitWhite->Metalness = .9;
+	UnlitWhite->Emission = XMFLOAT3(0, 0, 0);
+	UnlitWhite->MaterialType = 1;
 
-	auto standard3 = std::make_unique<Material>();
-	standard3->Name = "standard3";
-	standard3->MatCBIndex = 8;
-	standard3->DiffuseAlbedo = XMFLOAT4(0.2f, 0.9f, 0.1f, 1.0f);
-	standard3->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
-	standard3->Roughness = 0.2f;
-	standard3->Metalness = 0.8f;
-	standard3->Emission = XMFLOAT3(0, 0, 0);
-
-	auto standard4 = std::make_unique<Material>();
-	standard4->Name = "standard4";
-	standard4->MatCBIndex = 9;
-	standard4->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-	standard4->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
-	standard4->Roughness = 0.8f;
-	standard4->Metalness = 0.3f;
-	standard4->Emission = XMFLOAT3(1.f, 1.f, 1.f);
-
-	//hitable[1] = new Sphere(make_float3(-0.5, -99.4, -1), 100, new DevLambertian(make_float3(0.5f, 0.0f, 0.0f), make_float3(0, 0, 0)));
-	//hitable[2] = new Sphere(make_float3(1, 1, -1), 0.5, new DevMetal(make_float3(1, 1, 1), make_float3(0, 0, 0), 0));
-	//hitable[3] = new Sphere(make_float3(-1, 1, -1), 0.5, new DevMetal(make_float3(0.2, 0.9, 0.1), make_float3(0, 0, 0), .4));
-	//hitable[4] = new Sphere(make_float3(0, 3, 0), 1, new DevLambertian(make_float3(0.8, 0.8, 0.8), make_float3(6, 4, 2)));
-	//hitable[5] = new TriangleModel(new DevCoat(make_float3(0.9f, 0.3f, 0.0f), make_float3(0, 0, 0), 0));
 	RIManager.mMaterials["grass"] = std::move(grass);
 	RIManager.mMaterials["water"] = std::move(water);
 	RIManager.mMaterials["sky"] = std::move(sky);
@@ -629,9 +669,7 @@ void QDirect3D12Widget::BuildMaterial()
 	RIManager.mMaterials["standard"] = std::move(standard);
 	RIManager.mMaterials["standard0"] = std::move(standard0);
 	RIManager.mMaterials["standard1"] = std::move(standard1);
-	RIManager.mMaterials["standard2"] = std::move(standard2);
-	RIManager.mMaterials["standard3"] = std::move(standard3);
-	RIManager.mMaterials["standard4"] = std::move(standard4);
+	RIManager.mMaterials["unlit"] = std::move(UnlitWhite);
 
 	RIManager.SetTexture("grass", "grass");
 	RIManager.SetTexture("water", "water");
@@ -686,38 +724,38 @@ void QDirect3D12Widget::BuildLandGeometry() {
 
 void QDirect3D12Widget::BuildLakeGeometry()
 {
-	ProceduralGeometry::GeometryGenerator geoGen;
-	ProceduralGeometry::GeometryGenerator::MeshData grid =
-		geoGen.CreateGrid(160.0f, 160.0f, 50, 50);
-	//
-	// Extract the vertex elements we are interested and apply the height
-	// function to each vertex. In addition, color the vertices based on
-	// their height so we have sandy looking beaches, grassy low hills,
-	// and snow mountain peaks.
-	//
-	std::vector<Geometry::Vertex> vertices(grid.Vertices.size());
-	for (size_t i = 0; i < grid.Vertices.size(); ++i)
-	{
-		auto& p = grid.Vertices[i].Position;
-		vertices[i].Pos = p;
-		vertices[i].Pos.y = 0.5f;
-		//vertices[i].Color = XMFLOAT4(0.26f, 0.36f, 0.92f, 1.0f);
-		vertices[i].Normal = XMFLOAT3(0, 0, 0);
-		vertices[i].TexC = grid.Vertices[i].TexC;
-	}
-	std::vector<std::uint16_t> indices = grid.GetIndices16();
+	//ProceduralGeometry::GeometryGenerator geoGen;
+	//ProceduralGeometry::GeometryGenerator::MeshData grid =
+	//	geoGen.CreateGrid(160.0f, 160.0f, 50, 50);
+	////
+	//// Extract the vertex elements we are interested and apply the height
+	//// function to each vertex. In addition, color the vertices based on
+	//// their height so we have sandy looking beaches, grassy low hills,
+	//// and snow mountain peaks.
+	////
+	//std::vector<Geometry::Vertex> vertices(grid.Vertices.size());
+	//for (size_t i = 0; i < grid.Vertices.size(); ++i)
+	//{
+	//	auto& p = grid.Vertices[i].Position;
+	//	vertices[i].Pos = p;
+	//	vertices[i].Pos.y = 0.5f;
+	//	//vertices[i].Color = XMFLOAT4(0.26f, 0.36f, 0.92f, 1.0f);
+	//	vertices[i].Normal = XMFLOAT3(0, 0, 0);
+	//	vertices[i].TexC = grid.Vertices[i].TexC;
+	//}
+	//std::vector<std::uint16_t> indices = grid.GetIndices16();
 
-	MeshGeometryHelper helper(this);
-	helper.PushSubmeshGeometry("grid", vertices, indices);
-	RIManager.AddGeometry("lakeGeo", helper.CreateMeshGeometry("lakeGeo"));
-	//RenderItem* lake = RIManager.AddRitem("lakeGeo", "grid", RenderQueue::Transparent);
-	////lake->material = RIManager.mMaterials["water"].get();
+	//MeshGeometryHelper helper(this);
+	//helper.PushSubmeshGeometry("PolygonLight", lightstack.GetVertex(), lightstack.GetIndices16());
+	//RIManager.AddGeometry("PolygonLight", helper.CreateMeshGeometry("PolygonLight"));
+	//RenderItem* polygon = RIManager.AddRitem("PolygonLight", "PolygonLight", RenderQueue::Opaque);
+	//polygon->material = RIManager.mMaterials["unlit"].get();
 	//lake->material = RIManager.mMaterials["standard"].get();
 	//XMStoreFloat4x4(&lake->texTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 
-	wave = std::make_unique<Waves>(std::move(helper), vertices.size());
+	//wave = std::make_unique<Waves>(std::move(helper), vertices.size());
 
-	vertex_num = vertices.size();
+	//vertex_num = vertices.size();
 }
 
 void QDirect3D12Widget::BuildScreenCanvasGeometry()
@@ -739,7 +777,82 @@ void QDirect3D12Widget::BuildScreenCanvasGeometry()
 	RenderItem* screenRitem = RIManager.AddRitem("screen", "screen", RenderQueue::PostProcessing);
 	screenRitem->material = RIManager.mMaterials["screen"].get();
 }
+#define M_PI 3.14159265358979323846
 
+void RandVertex(float* position)
+{
+	float u = rand() / (float)RAND_MAX;
+	float v = rand() / (float)RAND_MAX;
+	float size = 1 + rand() / (float)RAND_MAX;
+
+	float theta = (u - 0.5) * M_PI;
+	float phi = (v - 0.5) * 2 * M_PI;
+
+	position[0] = size * cosf(theta) * cosf(phi);
+	position[1] = size * cosf(theta) * sinf(phi);
+	position[2] = size * sinf(theta);
+}
+
+void RandColor(float* color, float x)
+{
+	if (x > 0)
+	{
+		color[0] = 0.5 * rand() / (float)RAND_MAX;
+		color[1] = 0.5 * rand() / (float)RAND_MAX;
+		color[2] = 2 + 2 * rand() / (float)RAND_MAX;
+	}
+	else
+	{
+		color[0] = 2 + 2 * rand() / (float)RAND_MAX;
+		color[1] = 0.5 * rand() / (float)RAND_MAX;
+		color[2] = 0.5 * rand() / (float)RAND_MAX;
+	}
+}
+
+void InitColor(float* color, int i)
+{
+	int height = i % 16;
+	int width = i / 16;
+	color[0] = sinf(1. * height * M_PI/ 32);
+	color[1] = 0.2 * rand() / (float)RAND_MAX;
+	color[2] = cosf(1. * width * M_PI / 32);
+}
+void RandTriangle(float* position)
+{
+	float x = rand() / (float)RAND_MAX;
+	float y = rand() / (float)RAND_MAX;
+	float z = rand() / (float)RAND_MAX;
+	float alpha[3];
+	alpha[0] = x;
+	alpha[1] = y;
+	alpha[2] = z;
+	if (alpha[0] > alpha[1])
+	{
+		alpha[0] = y;
+		alpha[1] = x;
+	}
+	if (alpha[1] > alpha[2])
+	{
+		float tmp = alpha[1];
+		alpha[1] = alpha[2];
+		alpha[2] = tmp;
+	}
+	if (alpha[0] > alpha[1])
+	{
+		float tmp = alpha[0];
+		alpha[0] = alpha[1];
+		alpha[1] = tmp;
+	}
+
+	for (int i = 0; i < 3; i++)
+	{
+		float phi = (alpha[i] - 0.5) * 2 * M_PI;
+
+		position[i * 3 + 0] = cosf(phi);
+		position[i * 3 + 1] = 0;
+		position[i * 3 + 2] = sinf(phi);
+	}
+}
 void QDirect3D12Widget::BuildLights()
 {
 	std::unique_ptr<Light> light = std::make_unique<Light>(true);
@@ -767,6 +880,36 @@ void QDirect3D12Widget::BuildLights()
 	light3->basic.Position = XMFLOAT3(2, 1, -3);
 	light3->basic.Strength = XMFLOAT3(1, 1, 1);
 	RIManager.AddLight("Light3", light3);
+
+#ifdef MANYLIGHT
+	float vertices[9];
+	float color[3];
+	int max_v = fluid2d.VertexNum();
+	for (int i = 0; i < max_v; i++)
+	{
+		RandTriangle(vertices);
+		XMMATRIX matrix = fluid2d.GetTransform(i);
+		float z = matrix.r[3].m128_f32[2];
+		RandColor(color, z);
+		lightstack.PushPolygon(vertices, color);
+		lightstack.SetTransform(i, matrix);
+	}
+#endif // MANYLIGHT
+
+#ifdef THREELIGHT
+
+	float light_pos1[] = {  -1,1,-1, -1,-1,-1, -1,1,1 };
+	float light_color1[] = { .9, .2, .2 };
+	lightstack.PushPolygon(light_pos1, light_color1);
+
+	float light_pos2[] = { -2,2,-1, 2,2,-1,2,-2,-1 };
+	float light_color2[] = { 0.1, 0, 1 };
+	lightstack.PushPolygon(light_pos2, light_color2);
+
+	float light_pos3[] = { -2,2,-2, -2,2,2, 2,2,-2 };
+	float light_color3[] = { 0.9, 0.9, .2 };
+	lightstack.PushPolygon(light_pos3, light_color3);
+#endif // MANYLIGHT
 }
 
 #pragma endregion
@@ -803,7 +946,7 @@ void QDirect3D12Widget::BuildRootSignature()
 
 	// Root parameter can be a table, root descriptor or root constants.
 	//根参数可以是描述符表、根描述符、根常量
-	CD3DX12_ROOT_PARAMETER slotRootParameter[6];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[7];
 	slotRootParameter[1].InitAsConstantBufferView(0);
 	slotRootParameter[2].InitAsConstantBufferView(1);
 	//matSB绑定槽号为0的寄存器（和纹理公用一个SRV寄存器，但是不同Space）
@@ -819,10 +962,11 @@ void QDirect3D12Widget::BuildRootSignature()
 	slotRootParameter[5].InitAsDescriptorTable(1,//Range数量
 		&srvTableCubeArray,	//Range指针
 		D3D12_SHADER_VISIBILITY_PIXEL);	//该资源只能在像素着色器可读
+	slotRootParameter[6].InitAsShaderResourceView(/*寄存器槽号*/0, /*RegisterSpace*/ 2);
 
 	auto staticSamplers = TextureHelper::GetStaticSamplers();	//获得静态采样器集合
 	//根签名由一组根参数构成
-	CD3DX12_ROOT_SIGNATURE_DESC rootSig(6, //根参数的数量
+	CD3DX12_ROOT_SIGNATURE_DESC rootSig(7, //根参数的数量
 		slotRootParameter, //根参数指针
 		staticSamplers.size(),
 		staticSamplers.data(),	//静态采样器指针
@@ -849,7 +993,7 @@ void QDirect3D12Widget::BuildBoxGeometry()
 	ProceduralGeometry::GeometryGenerator geoGen;
 	ProceduralGeometry::GeometryGenerator::MeshData box = geoGen.CreateCube();
 
-	// PRT need
+	// Create skybox
 	std::vector<Geometry::Vertex> box_vertices(box.Vertices.size());
 	for (int i = 0; i < box.Vertices.size(); i++)
 	{
@@ -864,6 +1008,32 @@ void QDirect3D12Widget::BuildBoxGeometry()
 	RenderItem* skyboxRitem = RIManager.AddRitem("cube", "cube", RenderQueue::Skybox);
 	skyboxRitem->material = RIManager.mMaterials["sky"].get();
 
+	//// Create lights
+	//std::vector<Geometry::Vertex> light_vertices(3);
+	//light_vertices[0].Pos = XMFLOAT3(-2, 2, -2);
+	//light_vertices[0].Normal = XMFLOAT3(0, 0, 0);
+	//light_vertices[0].TexC = XMFLOAT2(0, 0);
+	//light_vertices[1].Pos = XMFLOAT3(-2, 2, 2);
+	//light_vertices[1].Normal = XMFLOAT3(0, 0, 0);
+	//light_vertices[1].TexC = XMFLOAT2(0, 0);
+	//light_vertices[2].Pos = XMFLOAT3(2, 2, -2);
+	//light_vertices[2].Normal = XMFLOAT3(0, 0, 0);
+	//light_vertices[2].TexC = XMFLOAT2(0, 0);
+	//std::vector<uint16> light_indices = { 0,2,1,0,1,2 };
+	//MeshGeometryHelper light_helper(this);
+	//light_helper.PushSubmeshGeometry("light", light_vertices, light_indices);
+	//RIManager.AddGeometry("light", light_helper.CreateMeshGeometry("light"));
+	//RenderItem* lightRitem = RIManager.AddRitem("light", "light", RenderQueue::Opaque);
+	//lightRitem->material = RIManager.mMaterials["unlit"].get();
+
+
+	MeshGeometryHelper helper_polylight(this);
+	helper_polylight.PushSubmeshGeometry("PolygonLight", lightstack.GetVertex(), lightstack.GetIndices16());
+	RIManager.AddGeometry("PolygonLight", helper_polylight.CreateMeshGeometry("PolygonLight"));
+	RenderItem* polygon = RIManager.AddRitem("PolygonLight", "PolygonLight", RenderQueue::Opaque);
+	polygon->material = RIManager.mMaterials["unlit"].get();
+
+	// Create Scene
 
 	ProceduralGeometry::GeometryGenerator::MeshData grid = geoGen.CreateGrid(100.0f, 100.0f, 2, 2);
 	std::vector<Geometry::Vertex> grid_vertices(grid.Vertices.size());
@@ -901,16 +1071,6 @@ void QDirect3D12Widget::BuildBoxGeometry()
 		XMStoreFloat4x4(&dragonItem->World, XMMatrixScaling(10, 10, 10));
 	}
 
-	// NO PRT
-	ModelLoader loader_light(this, true);
-	loader_light.Load("../Resources/Models/test.obj");
-	//RIManager.AddGeometry("light", loader_light.GetMeshGeometry());
-	//for (int i = 0; i < loader_light.subnum; i++)
-	//{
-	//	RenderItem* lightRitem = RIManager.AddRitem("light", loader_light.subname[i], RenderQueue::Opaque);
-	//	lightRitem->material = RIManager.mMaterials["standard"].get();
-	//	XMStoreFloat4x4(&lightRitem->World, XMMatrixScaling(10, 10, 10));
-	//}
 }
 
 void QDirect3D12Widget::BuildMultiGeometry()
@@ -926,80 +1086,6 @@ void QDirect3D12Widget::BuildMultiGeometry()
 		sphere_vertices[i].Normal = sphere.Vertices[i].Normal;
 		sphere_vertices[i].TexC = sphere.Vertices[i].TexC;
 	}
-	//std::vector<Geometry::Vertex> cylinder_vertices(cylinder.Vertices.size());
-	//for (int i = 0; i < cylinder.Vertices.size(); i++)
-	//{
-	//	cylinder_vertices[i].Pos = cylinder.Vertices[i].Position;
-	//	cylinder_vertices[i].Normal = cylinder.Vertices[i].Normal;
-	//	cylinder_vertices[i].TexC = cylinder.Vertices[i].TexC;
-	//}
-
-	MeshGeometryHelper helper(this);
-	helper.PushSubmeshGeometry("sphere", sphere_vertices, sphere.GetIndices16());
-	//helper.PushSubmeshGeometry("cylinder", cylinder_vertices, cylinder.GetIndices16());
-	//RIManager.AddGeometry("pillar", helper.CreateMeshGeometry("pillar"));
-
-	////将圆柱和圆的实例模型存入渲染项中
-	//for (int i = 0; i < 5; i++)
-	//{
-	//	RenderItem* leftCylinderRitem = RIManager.AddRitem("pillar", "cylinder", RenderQueue::Opaque);
-	//	RenderItem* rightCylinderRitem = RIManager.AddRitem("pillar", "cylinder", RenderQueue::Opaque);
-	//	RenderItem* leftSphereRitem = RIManager.AddRitem("pillar", "sphere", RenderQueue::Opaque);
-	//	RenderItem* rightSphereRitem = RIManager.AddRitem("pillar", "sphere", RenderQueue::Opaque);
-
-	//	XMMATRIX leftCylWorld = XMMatrixTranslation(-5.0f, 1.5f, -10.0f + i * 5.0f);
-	//	XMMATRIX rightCylWorld = XMMatrixTranslation(+5.0f, 1.5f, -10.0f + i * 5.0f);
-	//	XMMATRIX leftSphereWorld = XMMatrixTranslation(-5.0f, 3.5f, -10.0f + i * 5.0f);
-	//	XMMATRIX rightSphereWorld = XMMatrixTranslation(+5.0f, 3.5f, -10.0f + i * 5.0f);
-
-	//	//leftCylinderRitem->material = RIManager.mMaterials["grass"].get();
-	//	//rightCylinderRitem->material = RIManager.mMaterials["grass"].get();
-	//	//leftSphereRitem->material = RIManager.mMaterials["grass"].get();
-	//	//rightSphereRitem->material = RIManager.mMaterials["grass"].get();
-
-	//	leftCylinderRitem->material = RIManager.mMaterials["standard"].get();
-	//	rightCylinderRitem->material = RIManager.mMaterials["standard"].get();
-	//	leftSphereRitem->material = RIManager.mMaterials["standard"].get();
-	//	rightSphereRitem->material = RIManager.mMaterials["standard"].get();
-
-	//	//左边5个圆柱
-	//	XMStoreFloat4x4(&(leftCylinderRitem->World), leftCylWorld);
-	//	//右边5个圆柱
-	//	XMStoreFloat4x4(&(rightCylinderRitem->World), rightCylWorld);
-	//	//左边5个球
-	//	XMStoreFloat4x4(&(leftSphereRitem->World), leftSphereWorld);
-	//	//右边5个球
-	//	XMStoreFloat4x4(&(rightSphereRitem->World), rightSphereWorld);
-	//}
-
-	//MeshGeometryHelper helper_sphere(this);
-	//helper_sphere.PushSubmeshGeometry("sphere", sphere_vertices, sphere.GetIndices16());
-
-	//RIManager.AddGeometry("sphere", helper.CreateMeshGeometry("sphere"));
-	//RenderItem* sphere_ritem = RIManager.AddRitem("sphere", "sphere", RenderQueue::Opaque);
-	//XMMATRIX sphere_world = XMMatrixTranslation(0, 1, 1.2);
-	//sphere_ritem->material = RIManager.mMaterials["standard0"].get();
-	//XMStoreFloat4x4(&(sphere_ritem->World), sphere_world);
-
-	//RenderItem* sphere_ritem2 = RIManager.AddRitem("sphere", "sphere", RenderQueue::Opaque);
-	//sphere_ritem2->material = RIManager.mMaterials["standard1"].get();
-	//XMMATRIX sphere_world2 = XMMatrixScaling(200, 200, 200) * XMMatrixTranslation(-0.5, -99.4, -1);
-	//XMStoreFloat4x4(&(sphere_ritem2->World), sphere_world2);
-
-	//RenderItem* sphere_ritem3 = RIManager.AddRitem("sphere", "sphere", RenderQueue::Opaque);
-	//sphere_ritem3->material = RIManager.mMaterials["standard2"].get();
-	//XMMATRIX sphere_world3 = XMMatrixTranslation(1, 1, -1);
-	//XMStoreFloat4x4(&(sphere_ritem3->World), sphere_world3);
-
-	//RenderItem* sphere_ritem4 = RIManager.AddRitem("sphere", "sphere", RenderQueue::Opaque);
-	//sphere_ritem4->material = RIManager.mMaterials["standard3"].get();
-	//XMMATRIX sphere_world4 = XMMatrixTranslation(-1, 1, -1);
-	//XMStoreFloat4x4(&(sphere_ritem4->World), sphere_world4);
-
-	//RenderItem* sphere_ritem5 = RIManager.AddRitem("sphere", "sphere", RenderQueue::Opaque);
-	//sphere_ritem5->material = RIManager.mMaterials["standard4"].get();
-	//XMMATRIX sphere_world5 = XMMatrixScaling(2, 2, 2) * XMMatrixTranslation(0, 3, 0);
-	//XMStoreFloat4x4(&(sphere_ritem5->World), sphere_world5);
 }
 
 void QDirect3D12Widget::BuildPSO()

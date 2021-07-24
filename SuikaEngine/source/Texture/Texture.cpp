@@ -1,6 +1,6 @@
+#include <Precompiled.h>
 #include <Texture.h>
 #include <ScreenGrab.h>
-#include <wincodec.h>
 
 WritableTexture::WritableTexture(ID3D12Device* device, UINT width, UINT height, WritableType type):
 	textureType(type)

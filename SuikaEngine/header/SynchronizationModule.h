@@ -2,7 +2,7 @@
 #include <string>
 #include <Utility.h>
 #include <PipelineSetting.h>
-#include <FrameResources.h>
+#include <Platform/DirectX12/FrameResources.h>
 #include <RenderItemManagment.h>
 #include <Delegate.h>
 

@@ -1,3 +1,4 @@
+#include <Precompiled.h>
 //#include "SuikaGraphics.h"
 //#include <QtWidgets/QApplication>
 //

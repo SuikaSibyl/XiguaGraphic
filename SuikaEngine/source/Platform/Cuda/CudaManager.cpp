@@ -1,8 +1,5 @@
-#include <exception>
+#include <Precompiled.h>
 #include "CudaManager.h"
-#include <Windows.h>
-#include <Debug.h>
-#include <aclapi.h>
 #include <CudaPathTracer.h>
 
 WindowsSecurityAttributes::WindowsSecurityAttributes()
@@ -283,37 +280,6 @@ extern cudaTextureObject_t cubemap_tex;
 
 void CudaManager::BindTexture(Texture* texture)
 {
-
-	//HANDLE sharedHandle{};
-	//WindowsSecurityAttributes secAttr{};
-	//ThrowIfFailed(m_d3dDevice->CreateSharedHandle(texture->Resource.Get(), &secAttr, GENERIC_ALL, 0, &sharedHandle));
-	//const auto texAllocInfo = m_d3dDevice->GetResourceAllocationInfo(m_nodeMask, 1, &texture->Resource.Get()->GetDesc());
-
-	//cudaExternalMemoryHandleDesc cuExtmemHandleDesc{};
-	//cuExtmemHandleDesc.type = cudaExternalMemoryHandleTypeD3D12Heap;
-	//cuExtmemHandleDesc.handle.win32.handle = sharedHandle;
-	//cuExtmemHandleDesc.size = texAllocInfo.SizeInBytes;
-	//cuExtmemHandleDesc.flags = cudaExternalMemoryDedicated;
-	//checkCudaErrors(cudaImportExternalMemory(&m_externalMemory, &cuExtmemHandleDesc));
-
-	//cudaExternalMemoryMipmappedArrayDesc cuExtmemMipDesc{};
-	//cuExtmemMipDesc.extent = make_cudaExtent(texture->Width, texture->Height, 0);
-	//cuExtmemMipDesc.formatDesc = cudaCreateChannelDesc<float4>();
-	//cuExtmemMipDesc.numLevels = 1;
-	//cuExtmemMipDesc.flags = cudaArraySurfaceLoadStore;
-
-	//cudaMipmappedArray_t cuMipArray{};
-	//checkCudaErrors(cudaExternalMemoryGetMappedMipmappedArray(&cuMipArray, m_externalMemory, &cuExtmemMipDesc));
-
-	//cudaArray_t cuArray{};
-	//checkCudaErrors(cudaGetMipmappedArrayLevel(&cuArray, cuMipArray, 0));
-
-	//cudaResourceDesc cuResDesc{};
-	//cuResDesc.resType = cudaResourceTypeArray;
-	//cuResDesc.res.array.array = cuArray;
-	//checkCudaErrors(cudaCreateSurfaceObject(&(texture->cuSurface), &cuResDesc));
-	// where cudaSurfaceObject_t cuSurface{};
-
 	HANDLE sharedHandle{};
 	WindowsSecurityAttributes secAttr{};
 	ThrowIfFailed(m_d3dDevice->CreateSharedHandle(texture->Resource.Get(), &secAttr, GENERIC_ALL, 0, &sharedHandle));
@@ -345,46 +311,40 @@ void CudaManager::BindTexture(Texture* texture)
 	// where cudaSurfaceObject_t cuSurface{};
 
 	this->textureenv = texture;
-	//UpdateCudaSurface(texture);
-	//HANDLE sharedHandle{};
-	//WindowsSecurityAttributes secAttr{};
-	//ThrowIfFailed(m_d3dDevice->CreateSharedHandle(texture->Resource.Get(), &secAttr, GENERIC_ALL, 0, &sharedHandle));
-	//const auto texAllocInfo = m_d3dDevice->GetResourceAllocationInfo(m_nodeMask, 1, &texture->Resource.Get()->GetDesc());
-	//
-	//cudaExternalMemoryHandleDesc cuExtmemHandleDesc{};
-	//cuExtmemHandleDesc.type = cudaExternalMemoryHandleTypeD3D12Heap;
-	//cuExtmemHandleDesc.handle.win32.handle = sharedHandle;
-	//cuExtmemHandleDesc.size = texAllocInfo.SizeInBytes;
-	//cuExtmemHandleDesc.flags = cudaExternalMemoryDedicated;
-	//checkCudaErrors(cudaImportExternalMemory(&m_externalMemoryEnvmap, &cuExtmemHandleDesc));
+}
 
-	//cudaExternalMemoryMipmappedArrayDesc cuExtmemMipDesc{};
-	//cuExtmemMipDesc.extent = make_cudaExtent(texture->Width, texture->Height, 0);
-	//cuExtmemMipDesc.formatDesc = cudaCreateChannelDesc<float4>();
-	//cuExtmemMipDesc.numLevels = 1;
-	////cuExtmemMipDesc.flags = cudaArraySurfaceLoadStore;
+bool LoadFromFile(std::string name, float* lightCoeff)
+{
+	std::ifstream ifs(name, std::ios::binary | std::ios::in);
+	if (!ifs)
+	{
+		return false;
+	}
+	ifs.read((char*)lightCoeff, 16 * 3 * sizeof(float));
+	ifs.close();
+	return true;
+}
 
-	//cudaMipmappedArray_t cuMipArray{};
-	//checkCudaErrors(cudaExternalMemoryGetMappedMipmappedArray(&cuMipArray, m_externalMemoryEnvmap, &cuExtmemMipDesc));
+void WriteToFile(std::string name, float* data)
+{
+	std::ofstream  ofs(name, std::ios::binary | std::ios::out);
+	ofs.write((const char*)data, 16 * 3 * sizeof(float));
+	ofs.close();
+}
 
-	//cudaArray_t cuArray{};
-	//checkCudaErrors(cudaGetMipmappedArrayLevel(&cuArray, cuMipArray, 0));
+float* CudaManager::GetEnvCoeff()
+{
+	float* lightCoeff = new float[16 * 3];
+	if (!LoadFromFile(TRANSFER_PATH "LightCoeff.transfer", lightCoeff))
+	{
+		RunPrecomputeEnvironment(lightCoeff, this->textureenv->cuSurface);
+		WriteToFile(TRANSFER_PATH "LightCoeff.transfer", lightCoeff);
+	}
+	for (int i = 0; i < 3; i++)
+	{
 
-	//cudaResourceDesc texRes = {};
-	//texRes.resType = cudaResourceTypeArray;
-	//texRes.res.array.array = cuArray;
-
-	//cudaTextureDesc             texDescr;
-	//memset(&texDescr, 0, sizeof(cudaTextureDesc));
-
-	//texDescr.normalizedCoords = true;
-	//texDescr.filterMode = cudaFilterModeLinear;
-	//texDescr.addressMode[0] = cudaAddressModeWrap;
-	//texDescr.addressMode[1] = cudaAddressModeWrap;
-	//texDescr.readMode = cudaReadModeNormalizedFloat;
-
-	//checkCudaErrors(cudaCreateTextureObject(&(texture->cuTexture), &texRes, &texDescr, NULL));
-	//textureenv = texture;
+	}
+	return lightCoeff;
 }
 
 void CudaManager::BindCubemap(Texture* texture)
@@ -399,7 +359,6 @@ void CudaManager::BindCubemap(Texture* texture)
 	{
 		h_data[i] = (float)i;
 	}
-
 
 	HANDLE sharedHandle{};
 	WindowsSecurityAttributes secAttr{};

@@ -1,16 +1,5 @@
+#include <Precompiled.h>
 #include "SuikaGraphics.h"
-
-#include <QStyle>
-#include <QDebug>
-#include <QTime>
-#include <QScreen>
-#include <QMessageBox>
-#include <QCloseEvent>
-#include <QDesktopWidget>
-#include <QSplitter>
-#include <Singleton.h>
-#include <Debug.h>
-#include <iostream>
 
 SuikaGraphics::SuikaGraphics(QWidget *parent)
     : QMainWindow(parent)
@@ -107,7 +96,7 @@ void SuikaGraphics::connectSlots()
 {
     connect(m_pScene, &QDirect3D12Widget::deviceInitialized, this, &SuikaGraphics::init);
     connect(m_pScene, &QDirect3D12Widget::ticked, this, &SuikaGraphics::tick);
-    connect(m_pScene, &QDirect3D12Widget::rendered, this, &SuikaGraphics::render);
+    //connect(m_pScene, &QDirect3D12Widget::rendered, this, &SuikaGraphics::render);
 
     // NOTE: Additionally, you can listen to some basic IO events.
     // connect(m_pScene, &QDirect3D12Widget::keyPressed, this, &MainWindow::onKeyPressed);

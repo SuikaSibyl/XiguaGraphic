@@ -34,6 +34,7 @@ void prepCUDAscene();
 
 //void SetEnvironment(cudaTextureObject_t envmap);
 void SetEnvironment(cudaSurfaceObject_t envmap);
+void RunPrecomputeEnvironment(float* lightCoeff, cudaSurfaceObject_t textureObject);
 
 struct Clock {
 	unsigned firstValue;

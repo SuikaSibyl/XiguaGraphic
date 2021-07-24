@@ -55,12 +55,12 @@ public:
 
 	int TransferNum()
 	{
-		return (1 + mSHOrder) * (1 + mSHOrder) * mVerticesNum;
+		return (1 + mSHOrder) * (1 + mSHOrder) * mVerticesNum * 2;
 	}
 
 	int TransferSize()
 	{
-		return (1 + mSHOrder) * (1 + mSHOrder) * mVerticesNum * sizeof(float);
+		return (1 + mSHOrder) * (1 + mSHOrder) * mVerticesNum * sizeof(float) * 2;
 	}
 
 	bool LoadFromFile(std::string name)

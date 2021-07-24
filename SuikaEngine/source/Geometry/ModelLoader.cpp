@@ -1,7 +1,7 @@
+#include <Precompiled.h>
 #include <ModelLoader.h>
 #include <QDirect3D12Widget.h>
 #include <CudaPrt.h>
-#include <Options.h>
 
 ModelLoader::ModelLoader(QDirect3D12Widget* widget, bool isLargeModel) :helper(widget)
 {

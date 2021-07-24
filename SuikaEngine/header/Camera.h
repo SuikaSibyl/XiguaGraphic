@@ -7,6 +7,8 @@
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
 
+#define M_PI 3.14159265358979323846
+#define vfov 45
 class QDirect3D12Widget;
 
 class CudaManager;
@@ -54,17 +56,11 @@ public:
 	}
 
 	XMMATRIX GetViewMatrix();
+	XMVECTOR getRayDir(float s, float t);
 
 	void Update();
 
-	void Init()
-	{
-		camParas = new float[8];
-		m_pInputSystem->AddListeningMem(InputSystem::InputSystem::Pause, this, &Camera::ToggleMode);
-		m_pInputSystem->AddListeningMem(InputSystem::InputSystem::RTRender, this, &Camera::ToggleUseRT);
-
-		InitCubemapParas();
-	}
+	void Init();
 
 	void InitCubemapParas()
 	{
@@ -128,9 +124,17 @@ private:
 	float pos_y = 0;
 	float pos_z = 0;
 
+	float half_height = 0;
+	float half_width = 0;
+
 	Transform transform;
 
 	XMVECTOR GetInputTranslationDirection();
+
+	XMVECTOR pos;
+	XMVECTOR lower_left_corner;
+	XMVECTOR horizontal;
+	XMVECTOR vertical;
 
 	// Ray Tracing Part
 	bool useRT = false;

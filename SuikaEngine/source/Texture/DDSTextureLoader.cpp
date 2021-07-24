@@ -1,9 +1,5 @@
+#include <Precompiled.h>
 #include <DDSTextureLoader.h>
-
-#include <assert.h>
-#include <algorithm>
-#include <memory>
-#include <wrl.h>
 
 using namespace Microsoft::WRL;
 

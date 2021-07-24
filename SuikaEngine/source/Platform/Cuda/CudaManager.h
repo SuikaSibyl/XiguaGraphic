@@ -37,6 +37,7 @@ public:
 	void BindTexture(Texture* texture, Texture* compare);
 
 	void CreateScene(Suika::Scene& scene);
+	float* GetEnvCoeff();
 
 	void SetEnvmap();
 

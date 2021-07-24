@@ -2,13 +2,11 @@
 
 #include <Utility.h>
 #include <PipelineSetting.h>
-#include <memory>
-#include <UploadBuffer.h>
+#include <Platform/DirectX12/UploadBuffer.h>
 #include <Material.h>
 #include <Geometry.h>
 #include <CudaPrt.h>
 #include <Mesh.h>
-#include <string>
 
 class QDirect3D12Widget;
 
@@ -21,6 +19,7 @@ namespace Geometry
 		XMFLOAT3 Normal;
 		XMFLOAT2 TexC;
 		XMMATRIX SHTransfer;
+		XMMATRIX DepthTransfer;
 	};
 
 	// Defines a subrange of geometry in a MeshGeometry. This is for when
@@ -173,11 +172,16 @@ namespace Geometry
 				for (int j = 0; j < VerticesGroups[i].size(); j++)
 				{
 					VerticesGroups[i][j].SHTransfer = XMMATRIX(
-						ptr.pTransferData[index * 16 + 0], ptr.pTransferData[index * 16 + 1], ptr.pTransferData[index * 16 + 2], ptr.pTransferData[index * 16 + 3],
-						ptr.pTransferData[index * 16 + 4], ptr.pTransferData[index * 16 + 5], ptr.pTransferData[index * 16 + 6], ptr.pTransferData[index * 16 + 7],
-						ptr.pTransferData[index * 16 + 8], ptr.pTransferData[index * 16 + 9], ptr.pTransferData[index * 16 + 10], ptr.pTransferData[index * 16 + 11],
-						ptr.pTransferData[index * 16 + 12], ptr.pTransferData[index * 16 + 13], ptr.pTransferData[index * 16 + 14], ptr.pTransferData[index * 16 + 15]);
-
+						ptr.pTransferData[index * 32 + 0], ptr.pTransferData[index * 32 + 1], ptr.pTransferData[index * 32 + 2], ptr.pTransferData[index * 32 + 3],
+						ptr.pTransferData[index * 32 + 4], ptr.pTransferData[index * 32 + 5], ptr.pTransferData[index * 32 + 6], ptr.pTransferData[index * 32 + 7],
+						ptr.pTransferData[index * 32 + 8], ptr.pTransferData[index * 32 + 9], ptr.pTransferData[index * 32 + 10], ptr.pTransferData[index * 32 + 11],
+						ptr.pTransferData[index * 32 + 12], ptr.pTransferData[index * 32 + 13], ptr.pTransferData[index * 32 + 14], ptr.pTransferData[index * 32 + 15]);
+					
+					VerticesGroups[i][j].DepthTransfer = XMMATRIX(
+						ptr.pTransferData[index * 32 + 0 + 16], ptr.pTransferData[index * 32 + 1 + 16], ptr.pTransferData[index * 32 + 2 + 16], ptr.pTransferData[index * 32 + 3 + 16],
+						ptr.pTransferData[index * 32 + 4 + 16], ptr.pTransferData[index * 32 + 5 + 16], ptr.pTransferData[index * 32 + 6 + 16], ptr.pTransferData[index * 32 + 7 + 16],
+						ptr.pTransferData[index * 32 + 8 + 16], ptr.pTransferData[index * 32 + 9 + 16], ptr.pTransferData[index * 32 + 10 + 16], ptr.pTransferData[index * 32 + 11 + 16],
+						ptr.pTransferData[index * 32 + 12 + 16], ptr.pTransferData[index * 32 + 13 + 16], ptr.pTransferData[index * 32 + 14 + 16], ptr.pTransferData[index * 32 + 15 + 16]);
 					index++;
 				}
 			}

@@ -1,4 +1,4 @@
-#include <iostream>
+#include <Precompiled.h>
 #include <Suika.h>
 
 class Sandbox : public Suika::Application

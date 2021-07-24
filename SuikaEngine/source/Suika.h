@@ -2,8 +2,8 @@
 
 // For use by Suika Applications
 
-#include "Suika/Application.h"
-#include "Suika/Log.h"
+#include "Suika/Core/Application.h"
+#include "Suika/Core/Log.h"
 
 // ----------- Entry Point -------------
-#include "Suika/EntryPoint.h"
+#include "Suika/Core/EntryPoint.h"

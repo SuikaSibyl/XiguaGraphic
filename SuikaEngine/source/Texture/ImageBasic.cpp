@@ -1,3 +1,4 @@
+#include <Precompiled.h>
 #include <ImageBasic.h>
 
 using namespace IMG;

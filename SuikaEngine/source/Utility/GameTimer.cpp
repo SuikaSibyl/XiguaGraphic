@@ -1,5 +1,5 @@
+#include <Precompiled.h>
 #include "GameTimer.h"
-#include <windows.h>
 #include <Singleton.h>
 
 GameTimer::GameTimer() :

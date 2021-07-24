@@ -20,10 +20,10 @@
 #include <GameTimer.h>
 
 #include <Shader.h>
-#include <UploadBuffer.h>
+#include <Platform/DirectX12/UploadBuffer.h>
 #include <MeshGeometry.h>
 #include <PipelineSetting.h>
-#include <FrameResources.h>
+#include <Platform/DirectX12/FrameResources.h>
 #include <RenderItemManagment.h>
 #include <InputSystem.h>
 #include <Camera.h>
@@ -33,8 +33,10 @@
 #include <MemoryManagerModule.h>
 #include <SynchronizationModule.h>
 #include <ResourceBindingModule.h>
-#include <CudaManager.h>
+#include <Platform/Cuda/CudaManager.h>
 #include <Scene.h>
+#include <Rendering/Lighting/PolygonLight.h>
+#include <Physics/Fluid2D/fluid2d.h>
 
 using Microsoft::WRL::ComPtr;
 
@@ -44,6 +46,15 @@ class QDirect3D12Widget : public QWidget
 {
     Q_OBJECT
 
+    // ================================================================
+    // --------------------- LifeCycle Interface ----------------------
+    // ================================================================
+    PolygonLightStack lightstack;
+    Fluid2dSolver fluid2d;
+
+    // ================================================================
+    // --------------------- LifeCycle Interface ----------------------
+    // ================================================================
 public:
     friend class SuikaGraphics;
     friend class MeshGeometryHelper;
@@ -202,7 +213,6 @@ private:
     void SetMSAA();
     void CreateCommandObjects();
     void CreateSwapChain();
-    void CreateRTVDSVDescriptorHeap();
 #pragma endregion
 
     // ================================================================
@@ -240,7 +250,7 @@ signals:
     void widgetResized();
     // pipeline signal
     void ticked();
-    void rendered(ID3D12GraphicsCommandList* cl);
+    //void rendered(ID3D12GraphicsCommandList* cl);
     // Input signal
     void keyPressed(QKeyEvent*);
     void mouseMoved(QMouseEvent*);

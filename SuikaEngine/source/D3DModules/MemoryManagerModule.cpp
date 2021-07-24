@@ -1,7 +1,7 @@
+#include <Precompiled.h>
 #include <MemoryManagerModule.h>
 #include <SynchronizationModule.h>
 #include <ScreenGrab.h>
-#include <wincodec.h>
 
 //======================================================================================
 //======================================================================================
@@ -120,15 +120,127 @@ void D3DModules::RTDSSubmodule::RenderToTexture(std::string name, std::string ds
         &dsvHandle);	//指向DSV的指针
 }
 
+void D3DModules::RTDSSubmodule::RenderToTexture(std::string name, std::string name2, std::string dsname)
+{
+    //// Set RTV
+    //// ------------------------------------------
+    //resource_addr = mRTWritableTextures[name]->Resource();
+    ////设置Viewports与ScissorRects
+    //ptr_CommandList->RSSetViewports(1, &mRTWritableTextures[name]->Viewport());
+    //ptr_CommandList->RSSetScissorRects(1, &mRTWritableTextures[name]->ScissorRect());
+    //// Indicate a state transition on the resource usage.
+    ////接着我们将后台缓冲资源从呈现状态转换到渲染目标状态（即准备接收图像渲染）。
+    //mRTWritableTextures[name]->ChangeResourceState(ptr_CommandList, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    //mRTWritableTextures[name2]->ChangeResourceState(ptr_CommandList, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    ////ptr_CommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(resource_addr,//转换资源为后台缓冲区资源
+    ////    prev_state, D3D12_RESOURCE_STATE_RENDER_TARGET));//从呈现到渲染目标转换
+    //// Clear the back buffer and depth buffer.
+    ////然后清除后台缓冲区和深度缓冲区，并赋值。步骤是先获得堆中描述符句柄（即地址），再通过ClearRenderTargetView函数和ClearDepthStencilView函数做清除和赋值。这里我们将RT资源背景色赋值为DarkRed（暗红）。
+    //float dark[4] = { 0.117,0.117,0.117,1 };
+    //ptr_CommandList->ClearRenderTargetView(rtvHandle, dark, 0, nullptr);//清除RT背景色为暗红，并且不设置裁剪矩形
+    ////ptr_CommandList->ClearRenderTargetView(rtv2Handle, dark, 0, nullptr);//清除RT背景色为暗红，并且不设置裁剪矩形
+
+    //// Set DSV
+    //// ------------------------------------------
+    //D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = m_dsvHeap->GetCPUDescriptorHandleForHeapStart();
+    //if (dsname != "DEFAULT")
+    //{
+    //    dsvHandle = mDSWritableTextures[dsname]->Dsv();
+    //}
+    //ptr_CommandList->ClearDepthStencilView(dsvHandle,	//DSV描述符句柄
+    //    D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL,	//FLAG
+    //    1.0f,	//默认深度值
+    //    0,	//默认模板值
+    //    0,	//裁剪矩形数量
+    //    nullptr);	//裁剪矩形指针
+
+    //D3D12_CPU_DESCRIPTOR_HANDLE* handle_array = new D3D12_CPU_DESCRIPTOR_HANDLE();
+    //handle_array[0] = rtvHandle;
+    //handle_array[1] = rtv2Handle;
+    //// Specify the buffers we are going to render to. 
+    ////然后我们指定将要渲染的缓冲区，即指定RTV和DSV。
+    //ptr_CommandList->OMSetRenderTargets(1,//待绑定的RTV数量
+    //    &rtvHandle,	//指向RTV数组的指针
+    //    true,	//RTV对象在堆内存中是连续存放的
+    //    &dsvHandle);	//指向DSV的指针
+
+
+    CleanPreviousRenderTarget();
+
+    // Set the state of new Render Target
+    D3D12_RESOURCE_STATES prev_state;
+    ID3D12Resource* resource_addr;
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle;
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv2Handle;
+
+    // Set RTV
+    // ------------------------------------------
+    prevRTName = name;
+    prevRT2Name = name2;
+    prev_state = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+    rtvHandle = mRTWritableTextures[name]->Rtv();
+    rtv2Handle = mRTWritableTextures[name2]->Rtv();
+    //设置Viewports与ScissorRects
+    ptr_CommandList->RSSetViewports(1, &mRTWritableTextures[name]->Viewport());
+    ptr_CommandList->RSSetScissorRects(1, &mRTWritableTextures[name]->ScissorRect());
+    // Indicate a state transition on the resource usage.
+    //接着我们将后台缓冲资源从呈现状态转换到渲染目标状态（即准备接收图像渲染）。
+    mRTWritableTextures[name]->ChangeResourceState(ptr_CommandList, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    mRTWritableTextures[name2]->ChangeResourceState(ptr_CommandList, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    //ptr_CommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(resource_addr,//转换资源为后台缓冲区资源
+    //    prev_state, D3D12_RESOURCE_STATE_RENDER_TARGET));//从呈现到渲染目标转换
+    // Clear the back buffer and depth buffer.
+    //然后清除后台缓冲区和深度缓冲区，并赋值。步骤是先获得堆中描述符句柄（即地址），再通过ClearRenderTargetView函数和ClearDepthStencilView函数做清除和赋值。这里我们将RT资源背景色赋值为DarkRed（暗红）。
+    float dark[4] = { 0.117,0.117,0.117,1 };
+    ptr_CommandList->ClearRenderTargetView(rtvHandle, dark, 0, nullptr);//清除RT背景色为暗红，并且不设置裁剪矩形
+    ptr_CommandList->ClearRenderTargetView(rtv2Handle, dark, 0, nullptr);//清除RT背景色为暗红，并且不设置裁剪矩形
+
+    // Set DSV
+    // ------------------------------------------
+    D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = m_dsvHeap->GetCPUDescriptorHandleForHeapStart();
+    if (dsname != "DEFAULT")
+    {
+        dsvHandle = mDSWritableTextures[dsname]->Dsv();
+    }
+    ptr_CommandList->ClearDepthStencilView(dsvHandle,	//DSV描述符句柄
+        D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL,	//FLAG
+        1.0f,	//默认深度值
+        0,	//默认模板值
+        0,	//裁剪矩形数量
+        nullptr);	//裁剪矩形指针
+
+    D3D12_CPU_DESCRIPTOR_HANDLE* handle_array = new D3D12_CPU_DESCRIPTOR_HANDLE[2];
+    handle_array[0] = rtvHandle;
+    handle_array[1] = rtv2Handle;
+
+    // Specify the buffers we are going to render to. 
+    //然后我们指定将要渲染的缓冲区，即指定RTV和DSV。
+    ptr_CommandList->OMSetRenderTargets(2,//待绑定的RTV数量
+        handle_array,	//指向RTV数组的指针
+        false,	//RTV对象在堆内存中是连续存放的
+        &dsvHandle);	//指向DSV的指针
+}
 void D3DModules::RTDSSubmodule::CleanPreviousRenderTarget()
 {
-    if (prevRTName == "NONE")
-        return;
-
     //// 等到渲染完成，我们要将后台缓冲区的状态改成呈现状态，使其之后推到前台缓冲区显示。完了，关闭命令列表，等待传入命令队列。
-    mRTWritableTextures[prevRTName]->ChangeResourceState(
-        ptr_CommandList,
-        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    if (prevRTName != "NONE")
+        mRTWritableTextures[prevRTName]->ChangeResourceState(
+            ptr_CommandList,
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    if (prevRT2Name != "NONE")
+        mRTWritableTextures[prevRT2Name]->ChangeResourceState(
+            ptr_CommandList,
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    if (prevRT3Name != "NONE")
+        mRTWritableTextures[prevRT3Name]->ChangeResourceState(
+            ptr_CommandList,
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    prevRTName = "NONE";
+    prevRT2Name = "NONE";
+    prevRT3Name = "NONE";
  }
 
 void D3DModules::RTDSSubmodule::RenderTextureToScreen(std::string name)
@@ -358,6 +470,7 @@ ID3D12DescriptorHeap* D3DModules::ShaderResourceSubmodule::CreateSRVHeap(std::st
     srvDescriptorHeapDesc.NumDescriptors = num +
         MMModule->RTDSSub.mRTWritableTextures.size() +
         MMModule->RTDSSub.mDSWritableTextures.size() +
+        (2 * MMModule->SRVSub.mStructuredBuffers.size()) +
         (2 * MMModule->RTDSSub.mUAWritableTextures.size());
     srvDescriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     srvDescriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
@@ -443,10 +556,29 @@ void D3DModules::ShaderResourceSubmodule::InitSRVHeap(RenderItemManager* manager
         gpuHandle.Offset(1, m_cbv_srv_uavDescriptorSize);
     }
 
+    //for (auto iter = MMModule->SRVSub.mStructuredBuffers.begin(); iter != MMModule->SRVSub.mStructuredBuffers.end(); iter++)
+    //{
+    //    iter->second->SrvIndex = offset;
+    //    iter->second->CreateSrvDescriptor(CD3DX12_CPU_DESCRIPTOR_HANDLE(
+    //        m_SrvHeaps["main"]->GetCPUDescriptorHandleForHeapStart()
+    //        , offset++, m_cbv_srv_uavDescriptorSize), gpuHandle);
+    //    gpuHandle.Offset(1, m_cbv_srv_uavDescriptorSize);
+    //}
+
     // Create UAV Descriptor for all unord textures
     // ------------------------------------------------
     for (auto iter = MMModule->RTDSSub.mUAWritableTextures.begin(); iter != MMModule->RTDSSub.mUAWritableTextures.end(); iter++)
     {
+        iter->second->UavIndex = offset;
+        iter->second->CreateUavDescriptor(CD3DX12_CPU_DESCRIPTOR_HANDLE(
+            m_SrvHeaps["main"]->GetCPUDescriptorHandleForHeapStart()
+            , offset++, m_cbv_srv_uavDescriptorSize), gpuHandle);
+        gpuHandle.Offset(1, m_cbv_srv_uavDescriptorSize);
+    }
+
+    for (auto iter = MMModule->SRVSub.mStructuredBuffers.begin(); iter != MMModule->SRVSub.mStructuredBuffers.end(); iter++)
+    {
+        if (iter->second->Writable == false) continue;
         iter->second->UavIndex = offset;
         iter->second->CreateUavDescriptor(CD3DX12_CPU_DESCRIPTOR_HANDLE(
             m_SrvHeaps["main"]->GetCPUDescriptorHandleForHeapStart()

@@ -14,6 +14,8 @@ struct Material
 
 	// Index into SRV heap for diffuse texture. Used in the texturing chapter.
 	int DiffuseSrvHeapIndex = -1;
+	int NormalSrvHeapIndex = -1;
+	int ExtraSrvHeapIndex = -1;
 
 	// Dirty flag indicating the material has changed and we need to 
 	// update the constant buffer. Because we have a material constant 
@@ -30,4 +32,5 @@ struct Material
 	float Metalness = 0.25f;
 	DirectX::XMFLOAT3 Emission = { 0, 0, 0 };
 	DirectX::XMFLOAT4X4 MatTransform = MathHelper::Identity4x4();
+	int MaterialType = 0;
 };

@@ -1,3 +1,4 @@
+#include <Precompiled.h>
 #include <RenderItemManagment.h>
 #include <QDirect3D12Widget.h>
 

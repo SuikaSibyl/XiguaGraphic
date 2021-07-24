@@ -1,3 +1,4 @@
+#include <Precompiled.h>
 #include <wave.h>
 
 //Waves::Waves(int m, int n, float dx, float dt, float speed, float damping)

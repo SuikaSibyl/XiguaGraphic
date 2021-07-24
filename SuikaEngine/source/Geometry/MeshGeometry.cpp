@@ -1,3 +1,4 @@
+#include <Precompiled.h>
 #include <MeshGeometry.h>
 #include <QDirect3D12Widget.h>
 #include "bvh.h"

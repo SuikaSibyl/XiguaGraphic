@@ -9,5 +9,6 @@ namespace Suika
 	{
 	public:
 		std::vector<Suika::CudaTriangleModel*> models;
+
 	};
 }

@@ -1,3 +1,4 @@
+#include <Precompiled.h>
 #include <WorkSubmissionModule.h>
 
 ID3D12CommandQueue* D3DModules::WorkSubmissionModule::CreateCommandQueue(std::string name, D3D12_COMMAND_LIST_TYPE type)

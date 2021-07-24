@@ -1,3 +1,4 @@
+#include <Precompiled.h>
 #include <Mesh.h>
 #include <CudaUtil.h>
 #include <CudaPathTracer.h>

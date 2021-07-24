@@ -1,7 +1,6 @@
+#include <Precompiled.h>
 #include <Camera.h>
 #include <QDirect3D12Widget.h>
-#include <MathHelper.h>
-#include <Utility.h>
 
 void Camera::SetMouseModeDefocus()
 {
@@ -15,13 +14,52 @@ void Camera::SetMouseModeFocus()
 	m_pD3dWidget->setCursor(Qt::BlankCursor);
 }
 
+void InteractSphere(float& u, float& v, XMVECTOR& pos, XMVECTOR& dir)
+{
+	XMFLOAT3 position, direction;
+	XMStoreFloat3(&position, pos);
+	XMStoreFloat3(&direction, dir);
+
+	float a = direction.x * direction.x + 
+		direction.y + direction.y + 
+		direction.z * direction.z;
+
+	float b = position.x * direction.x +
+		position.y + direction.y +
+		position.z * direction.z;
+	b *= 2;
+
+	float c = position.x * position.x +
+		position.y + position.y +
+		position.z * position.z - 9;
+
+	float delta = b * b - 4 * a * c;
+	if (delta > 0)
+	{
+		float root = sqrtf(delta);
+		float distance = (b > 0) ? (-b + root) : (-b - root);
+		distance /= 2 * a;
+		XMVECTOR hitpoint = pos + distance * dir;
+
+	}
+	else
+	{
+		u = -1;
+		v = -1;
+	}
+}
+
 void Camera::OnMousePressed(QMouseEvent* event)
 {
 	int x = event->pos().x();
 	int y = event->pos().y();
-
+	XMVECTOR dir = getRayDir(x, y);
+	float u, v;
+	InteractSphere(u, v, pos, dir);
 	mLastMousePosx = x;
 	mLastMousePosy = y;
+	
+	Debug::Log(QString("x:") + QString::number(x) + QString(", y:") + QString::number(y));
 }
 
 void Camera::OnMouseMove(QMouseEvent* event)
@@ -61,6 +99,11 @@ void Camera::OnMouseMove(QMouseEvent* event)
 	}
 }
 
+XMVECTOR Camera::getRayDir(float s, float t)
+{
+	return XMVector3Normalize(lower_left_corner + s * 1. / m_pD3dWidget->width() * horizontal + t * 1. / m_pD3dWidget->width() * vertical - pos);
+}
+
 XMMATRIX Camera::GetViewMatrix()
 {
 	XMMATRIX view;
@@ -71,9 +114,19 @@ XMMATRIX Camera::GetViewMatrix()
 	float y = mRadius * sinf(-pitch);
 	// Build the view matrix. 
 
-	XMVECTOR pos = XMVectorSet(pos_x, pos_y, pos_z, 1.0f);
+	pos = XMVectorSet(pos_x, pos_y, pos_z, 1.0f);
 	XMVECTOR target = XMVectorSet(pos_x + x, pos_y + y, pos_z + z, 1.0f);
 	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+
+
+	XMVECTOR w = XMVector3Normalize(target - pos);
+	XMVECTOR u = XMVector3Normalize(XMVector3Cross(up, w));
+	XMVECTOR v = XMVector3Cross(w, u);
+
+	lower_left_corner = pos - half_width * u - half_height * v + w;
+	horizontal = 2 * half_width * u;
+	vertical = 2 * half_height * v;
+
 	view = XMMatrixLookAtLH(pos, target, up);
 
 	if (camParas[0] != pos_x)
@@ -108,6 +161,20 @@ XMMATRIX Camera::GetViewMatrix()
 	}
 
 	return std::move(view);
+}
+
+void Camera::Init()
+{
+	camParas = new float[8];
+	m_pInputSystem->AddListeningMem(InputSystem::InputSystem::Pause, this, &Camera::ToggleMode);
+	m_pInputSystem->AddListeningMem(InputSystem::InputSystem::RTRender, this, &Camera::ToggleUseRT);
+
+	float aspect = 1. * m_pD3dWidget->width() / m_pD3dWidget->height();
+	float theta = vfov * M_PI / 180;
+	half_height = tan(theta / 2);
+	half_width = aspect * half_height;
+	half_height *= -1;
+	InitCubemapParas();
 }
 
 void Camera::Update()

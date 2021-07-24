@@ -4,6 +4,7 @@
 #include <RenderItemManagment.h>
 #include <SynchronizationModule.h>
 #include <Texture.h>
+#include <Platform/DirectX12/StructuredBuffer.h>
 
 using Microsoft::WRL::ComPtr;
 namespace D3DModules
@@ -68,6 +69,7 @@ namespace D3DModules
 
         void RenderToScreen();
         void RenderToTexture(std::string rtname, std::string dsname = "DEFAULT");
+        void RenderToTexture(std::string rtname, std::string rt2name, std::string dsname);
         void RenderTextureToScreen(std::string rtname);
         void UnorderedAccessTextureToScreen(std::string rtname);
 
@@ -110,6 +112,8 @@ namespace D3DModules
         MemoryManagerModule* MMModule;
         // Previous RT name
         std::string prevRTName = "NONE";
+        std::string prevRT2Name = "NONE";
+        std::string prevRT3Name = "NONE";
 
     private:
         // Pipeline Basic Objects
@@ -162,12 +166,22 @@ namespace D3DModules
             return m_SrvHeaps["main"].Get();
         }
 
+        void PushStructuredBuffer(std::string name, std::unique_ptr<StructuredBuffer> buffer)
+        {
+            mStructuredBuffers[name] = std::move(buffer);
+        }
+
+        StructuredBuffer* GetStructuredBuffer(std::string name)
+        {
+            return mStructuredBuffers[name].get();
+        }
     private:
         UINT m_cbv_srv_uavDescriptorSize;
         ID3D12Device* m_d3dDevice;
         MemoryManagerModule* MMModule;
         ID3D12GraphicsCommandList* ptr_CommandList;
         std::unordered_map<std::string, ComPtr<ID3D12DescriptorHeap>> m_SrvHeaps;
+        std::unordered_map<std::string, std::unique_ptr<StructuredBuffer>> mStructuredBuffers;
     };
 
     //===================================================================================

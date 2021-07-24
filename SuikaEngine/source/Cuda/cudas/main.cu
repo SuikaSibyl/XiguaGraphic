@@ -1,11 +1,11 @@
 #include "RTUtils.cuh"
 #include "Utility.cuh"
-#include "HitableList.cuh"
-#include "Sphere.cuh"
+#include "Hitable/HitableList.cuh"
+#include "Hitable/Sphere.cuh"
 #include "DevMaterial.cuh"
 #include <Debug.h>
 #include <CudaPathTracer.h>
-#include <TriangleModel.h>
+#include <Hitable/TriangleModel.h>
 #include <CudaPrt.h>
 #include <Geometry.h>
 #include "SphericalHarmonic.cuh"
@@ -74,6 +74,7 @@ __device__ float3 Radiance(const Ray& r,  RandInstance& rnd, cudaSurfaceObject_t
         float4 pixel4{};
         float2 uv = SampleSphericalMap(r.dir);
         surf2Dread(&pixel4, textureObject, 16 * 3200 * uv.x, 1600 * uv.y);
+        //accucolor = make_float4(powf(pixel4.x, 2.2), powf(pixel4.y, 2.2), powf(pixel4.z, 2.2), 1);
         return make_float3(pixel4.x, pixel4.y, pixel4.z);
     }
 }
@@ -197,7 +198,7 @@ void RunKernel(size_t textureW, size_t textureH, cudaSurfaceObject_t surfaceObje
     float dist_to_focus = 5;
     float aperture = .5;
 
-    DevCamera* tmp = new DevCamera(lookfrom, lookat, make_float3(0, 1, 0), 45, textureW / textureH, aperture, dist_to_focus);
+    DevCamera* tmp = new DevCamera(lookfrom, lookat, make_float3(0, 1, 0), 45, 1. * textureW / textureH, aperture, dist_to_focus);
     float animTime = 0.01 * i;
     checkCudaErrors(cudaMemcpyToSymbol(camera, tmp, sizeof(DevCamera), 0, cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpyToSymbol(iTime, &animTime, sizeof(float),0,cudaMemcpyHostToDevice));
@@ -215,6 +216,7 @@ void RunKernel(size_t textureW, size_t textureH, cudaSurfaceObject_t surfaceObje
 // ================================================================
 // PRT part
 // ================================================================
+
 __global__ void PrecomputeTransfer(float* cudaPRTVertices, float* cudaPRTransfer, int order, int num)
 {
     int tid = blockDim.x * blockIdx.x + threadIdx.x;;
@@ -232,8 +234,11 @@ __global__ void PrecomputeTransfer(float* cudaPRTVertices, float* cudaPRTransfer
     {
         for (int j = 0; j < sample_count; j++)
         {
-            float phi = (-1 + 2.0 * i / sample_count) * M_PI;
-            float theta = (1.0 * j / sample_count) * M_PI;
+            float alpha = (1.0 * i / sample_count);
+            float beta = (1.0 * j / sample_count);
+
+            float phi = 2.0 * M_PI * beta;
+            float theta = acosf(2.0 * alpha - 1.0);
 
             float x = sin(theta) * cos(phi);
             float y = sin(theta) * sin(phi);
@@ -244,6 +249,7 @@ __global__ void PrecomputeTransfer(float* cudaPRTVertices, float* cudaPRTransfer
 
             //Hit Test
             float func_value = 0;
+            float thiness= 0;
             Ray ray(pos, dir);
             HitRecord rec;
             if (!(world)->hit(ray, 0.001, 100, rec))
@@ -251,19 +257,94 @@ __global__ void PrecomputeTransfer(float* cudaPRTVertices, float* cudaPRTransfer
                 func_value = fmaxf(dot(dir, norm), 0);
             }
 
+            if (dot(dir, norm) < 0)
+            {
+                //thiness = 3;
+                Ray depth_ray(pos, -dir);
+                HitRecord depth_rec;
+                if ((world)->hit(depth_ray, 0, 100, depth_rec))
+                {
+                    float tmp = 3 - length(depth_rec.p - pos);
+                    thiness = tmp > 0 ? tmp : 0;
+                }
+
+            }
+
             //evaluate the SH basis functions up to band O, scale them by the
             //function's value and accumulate them over all generated samples
             for (int l = 0; l <= order; l++) {
                 for (int m = -l; m <= l; m++) {
                     float sh = EvalHardCodedSH(l, m, dir);
-                    cudaPRTransfer[16 * tid + GetIndex(l, m)] += func_value * sh;
+                    cudaPRTransfer[32 * tid + GetIndex(l, m) + 0] += func_value * sh;
+                    cudaPRTransfer[32 * tid + GetIndex(l, m) + 16] += thiness * sh;
                 }
             }
         }
     }
+    float coeff = 1. / (sample_count * sample_count);
     for (int l = 0; l <= order; l++) {
         for (int m = -l; m <= l; m++) {
-            cudaPRTransfer[16 * tid + GetIndex(l, m)] /= sample_count * sample_count;
+            cudaPRTransfer[32 * tid + GetIndex(l, m) + 0] *= coeff;
+            cudaPRTransfer[32 * tid + GetIndex(l, m) + 16] *= coeff;
+        }
+    }
+}
+
+__device__ float4 ReadCubemap(float3 dir, cudaSurfaceObject_t textureObject)
+{
+    float4 pixel4{};
+    float2 uv = SampleSphericalMap(dir);
+    surf2Dread(&pixel4, textureObject, 16 * 3200 * uv.x, 1600 * uv.y);
+    return pixel4;
+}
+
+__global__ void PrecomputeEnvironment(cudaSurfaceObject_t textureObject, float* cudaPRT, int order)
+{
+    int tid = blockDim.x * blockIdx.x + threadIdx.x;;
+    if (tid > 0) return;
+
+    // This is the approach demonstrated in [1] and is useful for arbitrary
+    // functions on the sphere that are represented analytically.
+    int longitude_count = 256;
+    int latitude_count = 256;
+
+    for (int i = 0; i < longitude_count; i++)
+    {
+        for (int j = 0; j < latitude_count; j++)
+        {
+            float alpha = (1.0 * i / longitude_count);
+            float beta = (1.0 * j / latitude_count);
+
+            float phi = 2.0 * M_PI * beta;
+            float theta = acosf(2.0 * alpha - 1.0);
+                 
+            float x = sin(theta) * cos(phi);
+            float y = sin(theta) * sin(phi);
+            float z = cos(theta);
+             
+            float3 dir = make_float3(x, y, z);
+            //dir = normalize(dir);
+            float4 color = ReadCubemap(dir, textureObject);
+            //float4 color = make_float4(1, 1, 1, 1);
+            //evaluate the SH basis functions up to band O, scale them by the
+            //function's value and accumulate them over all generated samples
+            for (int l = 0; l <= order; l++) {
+                for (int m = -l; m <= l; m++) {
+                    float sh = EvalHardCodedSH(l, m, dir);
+                    cudaPRT[16 * 0 + GetIndex(l, m)] += color.x * sh;
+                    cudaPRT[16 * 1 + GetIndex(l, m)] += color.y * sh;
+                    cudaPRT[16 * 2 + GetIndex(l, m)] += color.z * sh;
+                }
+            }
+        }
+    }
+
+    float coeff = 1. / (longitude_count * latitude_count);
+    for (int l = 0; l <= order; l++) {
+        for (int m = -l; m <= l; m++) {
+            cudaPRT[16 * 0 + GetIndex(l, m)] *= coeff;
+            cudaPRT[16 * 1 + GetIndex(l, m)] *= coeff;
+            cudaPRT[16 * 2 + GetIndex(l, m)] *= coeff;
         }
     }
 }
@@ -296,3 +377,22 @@ void RunPrecomputeTransfer(PRTransfer* prt)
 
     cudaDeviceSynchronize();
 }
+
+void RunPrecomputeEnvironment(float* lightCoeff, cudaSurfaceObject_t textureObject)
+{
+    float* cudaPRT;
+
+    // copy vertex data to CUDA global memory
+    checkCudaErrors(cudaMalloc((void**)&cudaPRT, 3 * 16 * sizeof(float)));
+
+    // Emit main call kernel
+    // -------------------------------
+    PrecomputeEnvironment << <1,1 >> > (textureObject, cudaPRT, 3);
+
+    checkCudaErrors(cudaMemcpy(lightCoeff, cudaPRT, 3 * 16 * sizeof(float), cudaMemcpyDeviceToHost));
+
+    // Free all cuda memory
+    checkCudaErrors(cudaFree(cudaPRT));
+    cudaDeviceSynchronize();
+}
+

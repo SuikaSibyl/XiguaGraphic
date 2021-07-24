@@ -1,7 +1,5 @@
-#include <Debug.h>
+#include <Precompiled.h>
 #include <SuikaGraphics.h>
-#include <QTime>
-#include <Singleton.h>
 
 void Debug::m_Log(QString info)
 {

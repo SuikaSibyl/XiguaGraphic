@@ -1,8 +1,6 @@
+#include <Precompiled.h>
 #include <TextureHelper.h>
 #include <QDirect3D12Widget.h>
-#include <Utility.h>
-#include <minwinbase.h>
-#include <Options.h>
 
 using namespace IMG;
 
