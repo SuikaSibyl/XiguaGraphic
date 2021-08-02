@@ -1,4 +1,4 @@
-#include "Common.hlsl"
+#include "ShaderLibrary/Common.hlsl"
 
 float CalcAttenuation(float d, float falloffStart, float falloffEnd)
 {

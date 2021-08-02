@@ -7,6 +7,10 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SuikaEngine", "SuikaEngine\
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SuikaGraphic", "SuikaGraphic\SuikaGraphic.vcxproj", "{C85EE76E-B4D1-4A44-A43A-50A078E47B30}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SuikaModules", "SuikaModules", "{6ADA1235-4A82-4972-87FD-79D8BD395787}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SuikaPathTracer", "SuikaModules\SuikaPathTracer\SuikaPathTracer\SuikaPathTracer.vcxproj", "{FF01966A-C3B8-4911-9BC4-95764852C3AC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -31,9 +35,20 @@ Global
 		{C85EE76E-B4D1-4A44-A43A-50A078E47B30}.Release|x64.Build.0 = Release|x64
 		{C85EE76E-B4D1-4A44-A43A-50A078E47B30}.Release|x86.ActiveCfg = Release|Win32
 		{C85EE76E-B4D1-4A44-A43A-50A078E47B30}.Release|x86.Build.0 = Release|Win32
+		{FF01966A-C3B8-4911-9BC4-95764852C3AC}.Debug|x64.ActiveCfg = Debug|x64
+		{FF01966A-C3B8-4911-9BC4-95764852C3AC}.Debug|x64.Build.0 = Debug|x64
+		{FF01966A-C3B8-4911-9BC4-95764852C3AC}.Debug|x86.ActiveCfg = Debug|Win32
+		{FF01966A-C3B8-4911-9BC4-95764852C3AC}.Debug|x86.Build.0 = Debug|Win32
+		{FF01966A-C3B8-4911-9BC4-95764852C3AC}.Release|x64.ActiveCfg = Release|x64
+		{FF01966A-C3B8-4911-9BC4-95764852C3AC}.Release|x64.Build.0 = Release|x64
+		{FF01966A-C3B8-4911-9BC4-95764852C3AC}.Release|x86.ActiveCfg = Release|Win32
+		{FF01966A-C3B8-4911-9BC4-95764852C3AC}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{FF01966A-C3B8-4911-9BC4-95764852C3AC} = {6ADA1235-4A82-4972-87FD-79D8BD395787}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {A72BB605-D57D-4182-A13B-4E701C255715}

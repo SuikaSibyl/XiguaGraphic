@@ -1,4 +1,4 @@
-#include "Common.hlsl"
+#include "ShaderLibrary/Common.hlsl"
 #include "Random.hlsl"
 #include "PBR.hlsl"
 
