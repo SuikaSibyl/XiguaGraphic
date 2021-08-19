@@ -1,7 +1,7 @@
 # XiguaGraphic
 
 ## Warnings
-The program is based on <Introduction to 3D Game Programming with DirectX12>, and provided support for only DX12 Raster API.
+The program is based on "Introduction to 3D Game Programming with DirectX12", and provided support for only DX12 Raster API.
 Sadly, although after struggling for writing complex DX12 codes I finally implemented some great stuff, I gradually to realize
 the structure of the program is too bad. Basically speaking, it's too bad in encapsuling and decoupling, so I would not want to 
 rehash this mess anylonger. I'm now working on something better arranged and designed, and the new program is going to get publiced later, 
@@ -26,7 +26,7 @@ For rasterization part, I implemented:
   ![image](https://github.com/SuikaSibyl/XiguaGraphic/blob/main/figs/SplitSum.png)
 - PRT with multiple polygon lights, also with Translucent Material
 
-  It's based on paper <Analytic Spherical Harmonic Gradients for Real-Time Rendering with Many Polygonal Area Lights>
+  It's based on paper "Analytic Spherical Harmonic Gradients for Real-Time Rendering with Many Polygonal Area Lights"
   
   ![image](https://github.com/SuikaSibyl/XiguaGraphic/blob/main/figs/PRT.png)
   ![image](https://github.com/SuikaSibyl/XiguaGraphic/blob/main/figs/MultiLights.png)
